@@ -13,7 +13,7 @@ module Algebra.Montgomery.Instance where
 --------------------------------------------------------------------------------
 
 open import Data.Nat
-
+open import Data.String using ( String )
 open import Relation.Binary.PropositionalEquality
 
 open import Meta.Object
@@ -30,17 +30,50 @@ record MontgomeryAPI (p : Prime) : Set where
     Big    : Ty
     Big²   : Ty
     Mont   : Ty
+    tyName : String
     montFromℕ     : ℕ -> Tm Mont 
     unsafeFromBig : Tm Big  -> Tm Mont
     toBig         : Tm Mont -> Tm Big 
     importMont    : {l : ℕ} -> #limbs ≡ l -> Tm (BigInt l) -> Tm Mont
     exportMont    : {l : ℕ} -> #limbs ≡ l -> Tm Mont -> Tm (BigInt l)
+    isEqual : Tm Mont -> Tm Mont -> Tm Bit
     neg    : Tm Mont -> Tm Mont
     dbl    : Tm Mont -> Tm Mont
     add    : Tm Mont -> Tm Mont -> Tm Mont
     sub    : Tm Mont -> Tm Mont -> Tm Mont
     sqr    : Tm Mont -> Tm Mont
     mul    : Tm Mont -> Tm Mont -> Tm Mont
+--    staticPow : Tm Mont -> ℕ -> Tm Mont
+
+--------------------------------------------------------------------------------
+
+open import Algebra.API.Field
+
+montgomeryApiToFieldAPI : {prime : Prime} -> MontgomeryAPI prime -> FieldAPI
+montgomeryApiToFieldAPI {prime} mont = api where
+
+  api = record
+    { F      = MontgomeryAPI.Mont       mont
+    ; fromℕ  = MontgomeryAPI.montFromℕ mont
+    -- metadata
+    ; name   = MontgomeryAPI.tyName mont
+    ; size   = Prime.primeℕ prime
+--    ; mulGen : Tm F
+    -- queries
+    ; isEqual  = MontgomeryAPI.isEqual mont
+--    ; isEqualℕ : ℕ    -> Tm F -> Tm Bit
+    -- arithmetic
+    ; neg   = MontgomeryAPI.neg mont
+    ; add   = MontgomeryAPI.add mont
+    ; sub   = MontgomeryAPI.sub mont
+    ; sqr   = MontgomeryAPI.sqr mont
+    ; mul   = MontgomeryAPI.mul mont
+--    ; inv   : Tm F -> Tm F  
+--    ; div   : Tm F -> Tm F -> Tm F
+--    ; divBySmallConst : Tm F -> ℕ -> Tm F
+    -- exponentiation
+--    ; staticPow = MontgomeryAPI.staticPow mont
+    } 
 
 --------------------------------------------------------------------------------
 
@@ -69,6 +102,8 @@ withMontgomery {ty} prime kont = final where
     toBigFun <- gen (Log "montToBig" (Lam (MontP.toBigInt' redcFun)))
     unsafeFromBigFun <- gen (Log "unsafeMontFromBig" (Lam (MontP.unsafeFromBigInt' redcFun)))
 
+    isEqualFun <- gen (Log "montIsEqual" (Lam2 MontP.isEqual))
+    
     -- negFun  : Tm (Mont ⇒ Mont)
     -- dblFun  : Tm (Mont ⇒ Mont)
     -- addFun  : Tm (Mont ⇒ Mont ⇒ Mont)
@@ -82,29 +117,39 @@ withMontgomery {ty} prime kont = final where
     -- sqrFun  : Tm (Big² ⇒ Big) -> Tm (Mont ⇒ Mont)
     -- mulFun  : Tm (Big² ⇒ Big) -> Tm (Mont ⇒ Mont ⇒ Mont)
 
-    sqrFun <- gen (Log "sqr" (Lam  (MontP.square' redcFun)))
-    mulFun <- gen (Log "mul" (Lam2 (MontP.mul'    redcFun)))
-    -- sqrFun <- gen (Log "montSqr" (Lam  MontP.square))
-    -- mulFun <- gen (Log "montMul" (Lam2 MontP.mul   ))
-
+    sqrFun <- gen (Log "montSqr" (Lam  (MontP.square' redcFun)))
+    mulFun <- gen (Log "montMul" (Lam2 (MontP.mul'    redcFun)))
+ 
+    -- cannot really "gen" this???
+    -- staticPowFun <- gen ...
+    
     let api = record
           { #limbs = MontP.#limbs
           ; Big    = MontP.Big
           ; Big²   = MontP.Big²
           ; Mont   = MontP.Mont
+          ; tyName = MontP.tyName
           ; montFromℕ     = MontP.montFromℕ
           ; toBig         = App toBigFun
           ; unsafeFromBig = App unsafeFromBigFun
           ; importMont    = \eq tm -> App unsafeFromBigFun (importBig eq tm)
           ; exportMont    = \eq tm -> exportBig eq (App toBigFun tm)
+          ; isEqual = App2 isEqualFun
           ; neg    = App  negFun
           ; dbl    = App  dblFun
           ; add    = App2 addFun
           ; sub    = App2 subFun
           ; sqr    = App  sqrFun
           ; mul    = App2 mulFun
+--          ; staticPow = \base expo -> App (staticPowFun expo) base 
           }
 
     return (kont api)
 
 --------------------------------------------------------------------------------
+
+withMontgomeryAsField : {ty : Ty} -> (prime : Prime) -> (FieldAPI -> Tm ty) -> Tm ty
+withMontgomeryAsField prime kont = withMontgomery prime \montAPI -> kont (montgomeryApiToFieldAPI montAPI)
+
+--------------------------------------------------------------------------------
+  

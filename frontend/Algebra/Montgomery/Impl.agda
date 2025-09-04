@@ -99,6 +99,9 @@ private
   unwrap2 : {ty : Ty} -> Tm Mont -> Tm Mont -> (Tm Big -> Tm Big -> Tm ty) -> Tm ty
   unwrap2 tm1 tm2 g = Let (unwrap tm1) \x -> Let (unwrap tm2) \y -> g x y
 
+isEqual : Tm Mont -> Tm Mont -> Tm Bit
+isEqual x y = unwrap2 x y BigInt.isEqual
+
 --------------------------------------------------------------------------------
 
 private
@@ -464,3 +467,27 @@ toBigInt : Tm Mont -> Tm Big
 toBigInt input = montgomeryREDC (BigInt.extendBigInt #limbs (unwrap input))
 
 --------------------------------------------------------------------------------
+
+montZero montOne montTwo : Tm Mont
+montZero = montFromℕ 0
+montOne  = montFromℕ 1
+montTwo  = montFromℕ 2
+
+open import Algebra.Misc using ( Half ; Even ; Odd ; halve )
+
+{-# TERMINATING #-}
+staticPow' : (Tm Mont -> Tm Mont) -> (Tm Mont -> Tm Mont -> Tm Mont) -> Tm Mont -> ℕ -> Tm Mont
+staticPow' sqr mul base expo = go expo base where
+  go : ℕ -> Tm Mont -> Tm Mont
+  go 0 _ = montOne
+  go 1 x = x
+  go n x with halve n 
+  go _ x | Even k = Let (go k x) \s ->      sqr s
+  go _ x | Odd  k = Let (go k x) \s -> mul (sqr s) x
+
+staticPow : Tm Mont -> ℕ -> Tm Mont
+staticPow base expo = staticPow' square mul base expo
+
+--------------------------------------------------------------------------------
+
+
