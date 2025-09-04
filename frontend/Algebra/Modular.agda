@@ -70,6 +70,15 @@ Big = BigInt #limbs
 Mod : Ty
 Mod = Named tyName Big   -- (BigInt #limbs) 
 
+toBig : Tm Mod -> Tm Big
+toBig = unwrap
+
+fromBig : Tm Big -> Tm Mod
+fromBig = wrap
+
+fromℕ : ℕ -> Tm Mod
+fromℕ k = fromBig (bigIntFromℕ (k % prime))
+
 --------------------------------------------------------------------------------
 
 private 
@@ -107,6 +116,12 @@ private
 
   unwrap2 : {ty : Ty} -> Tm Mod -> Tm Mod -> (Tm Big -> Tm Big -> Tm ty) -> Tm ty
   unwrap2 tm1 tm2 g = Let (unwrap tm1) \x -> Let (unwrap tm2) \y -> g x y
+
+  with1 : Tm Mod -> (Tm Big -> Tm Big) -> Tm Mod
+  with1 tm f = wrap (unwrap1 tm f)
+
+  with2 : Tm Mod -> Tm Mod -> (Tm Big -> Tm Big -> Tm Big) -> Tm Mod 
+  with2 tm1 tm2 f = wrap (unwrap2 tm1 tm2 f)
 
 --------------------------------------------------------------------------------
 
@@ -211,3 +226,16 @@ barrettReduction modulus input0
        $ (2^(twiceLimbSize*k)) `div` (integerFromLimbs modulus)
 -}
 
+--------------------------------------------------------------------------------
+
+open import Algebra.API.Word.BigInt
+
+open import Algebra.Euclid (bigIntAsWordAPI #limbs) using ( modularInv′ ; modularDiv′ )
+
+inv : Tm Mod -> Tm Mod
+inv x = with1 x (modularInv′ prime′)
+
+div : Tm Mod -> Tm Mod -> Tm Mod
+div x y = with2 x y (modularDiv′ prime′)
+
+--------------------------------------------------------------------------------

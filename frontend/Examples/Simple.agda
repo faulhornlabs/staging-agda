@@ -28,24 +28,23 @@ module Big where
   halfP+1 : Tm (BigInt 4)
   halfP+1 = bigIntFromℕ 10944121435919637611123202872628637544274182200208017171849102093287904247809
 
-  big1 : Tm (BigInt 4)
+  big1 big2 big3 : Tm (BigInt 4)
   big1 = bigIntFromℕ 12535032671501493392438659292886563663979619812816639413586309554197071221275
-
-  big2 : Tm (BigInt 4)
   big2 = bigIntFromℕ 20670156704232560809430694243501641649572216251781105022963497476851362916519
+  big3 = bigIntFromℕ 10734482926936635597888852654981536388697257091861152194513442686302125663795
   --         prime = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
-  big3 : Tm (BigInt 4)
-  big3 = bigIntFromℕ 10734482926936635597888852654981536388697257091861152194513442686302125663795
-
-  small1 : Tm (BigInt 2)
+  small1 small2 : Tm (BigInt 2)
   small1 = bigIntFromℕ 298219370995091515800384725779828479220
-
-  small2 : Tm (BigInt 2)
   small2 = bigIntFromℕ 45210828018843085130265813626022701902
 
   verySmall : Tm (BigInt 1)
   verySmall = bigIntFromℕ 45210828018843
+
+  tiny1 tiny2 tiny3 : Tm (BigInt 1)
+  tiny1 = bigIntFromℕ 386048
+  tiny2 = bigIntFromℕ 713841
+  tiny3 = bigIntFromℕ 489020
 
   exBig0 : Tm (BigInt _)
   exBig0 = snd (Algebra.BigInt.add big1 big2)
@@ -86,6 +85,9 @@ thePrime-ℕ = bigFieldPrime (ScalarField BN254)
 thePrime : Prime
 thePrime = mkPrime thePrime-ℕ
 
+tinyPrime : Prime
+tinyPrime = mkPrime 1299709
+
 --------------------------------------------------------------------------------
 -- *** MODULAR ***
 
@@ -98,26 +100,46 @@ module Baz where
   T : Ty
   T = Mod
   
-  mod1 : Tm Mod
+  mod1 mod2 mod3 : Tm Mod
   mod1 = wrap Big.big1
-
-  mod2 : Tm Mod
   mod2 = wrap Big.big2
-
-  mod3 : Tm Mod
   mod3 = wrap Big.big3
 
-  exMod1 : Tm Mod
+  exMod1 exMod2 exModInv exModDiv : Tm Mod
   exMod1 = ModuloP.add mod1 mod2
-
-  exMod2 : Tm Mod
   exMod2 = ModuloP.sub mod1 mod2
+  exModInv = ModuloP.inv mod1
+  exModDiv = ModuloP.div mod1 mod2
 
-exMod1 : Tm Baz.T
+exMod1 exMod2 exModInv exModDiv : Tm Baz.T
 exMod1 = Baz.exMod1
-
-exMod2 : Tm Baz.T
 exMod2 = Baz.exMod2
+exModInv = Baz.exModInv
+exModDiv = Baz.exModDiv
+
+--------------------------------------------------------------------------------
+
+module TinyBaz where
+
+  import Algebra.Modular as Modular
+
+  open module ModuloP = Modular tinyPrime 
+
+  T : Ty
+  T = Mod
+  
+  mod1 mod2 mod3 : Tm Mod
+  mod1 = wrap Big.tiny1
+  mod2 = wrap Big.tiny2
+  mod3 = wrap Big.tiny3
+
+  exTinyModInv exTinyModDiv : Tm Mod
+  exTinyModInv = ModuloP.inv mod1
+  exTinyModDiv = ModuloP.div mod1 mod2
+
+exTinyModInv exTinyModDiv : Tm TinyBaz.T
+exTinyModInv = TinyBaz.exTinyModInv
+exTinyModDiv = TinyBaz.exTinyModDiv
 
 --------------------------------------------------------------------------------
 -- *** MONTGOMERY ***
@@ -127,13 +149,9 @@ module Bar where
   import Algebra.Montgomery.Impl as Montgomery
   open module MontP = Montgomery thePrime
 
-  mont1 : Tm Mont
+  mont1 mont2 mont3 : Tm Mont
   mont1 = wrap Big.big1
-
-  mont2 : Tm Mont
   mont2 = wrap Big.big2
-
-  mont3 : Tm Mont
   mont3 = wrap Big.big3
 
   exMont1 : Tm Mont
@@ -169,23 +187,15 @@ module Foo where
     eq4 | 4 = refl
 
 {-
-    big1 : Tm Big
+    big1 big2 big3 : Tm Big
     big1 = bigIntFromℕ 12535032671501493392438659292886563663979619812816639413586309554197071221275
-
-    big2 : Tm Big
     big2 = bigIntFromℕ 20670156704232560809430694243501641649572216251781105022963497476851362916519
-
-    big3 : Tm Big
     big3 = bigIntFromℕ 10734482926936635597888852654981536388697257091861152194513442686302125663795
 -}
 
-    mont1 : Tm Mont
+    mont1 mont2 mont3 : Tm Mont
     mont1 = montFromℕ 12535032671501493392438659292886563663979619812816639413586309554197071221275
-
-    mont2 : Tm Mont
     mont2 = montFromℕ 20670156704232560809430694243501641649572216251781105022963497476851362916519
-
-    mont3 : Tm Mont
     mont3 = montFromℕ 10734482926936635597888852654981536388697257091861152194513442686302125663795
 
     result : Tm (BigInt 4)
@@ -212,23 +222,16 @@ open NatLib
 
 import Examples.Tests as Tests
 
-natEx1 : Tm Nat
+natEx1 natEx2 : Tm Nat
 natEx1 = Tests.natFixPow 7 (kstNat 2)
-
-natEx2 : Tm Nat
 natEx2 = Tests.natDynPowNaive (kstNat 8) (kstNat 2) 
 
-lamEx0 : Tm Nat
-lamEx0 = App Tests.squarePlus7 (kstNat 10)
-
-lamEx1 : Tm (Pair Nat Nat)
-lamEx1 = Tests.lamTest2
-
-lamEx2a : Tm Nat
+lamEx0 lamEx2a : Tm Nat
+lamEx1 lamEx2  : Tm (Pair Nat Nat)
+lamEx0  = App Tests.squarePlus7 (kstNat 10)
+lamEx1  = Tests.lamTest2
 lamEx2a = Tests.lamTest3
-
-lamEx2 : Tm (Pair Nat Nat)
-lamEx2 = Tests.lambdaLiftTest
+lamEx2  = Tests.lambdaLiftTest
 
 mixedLam1 : Tm (Pair U64 Nat)
 mixedLam1 = Tests.mixedTest1
