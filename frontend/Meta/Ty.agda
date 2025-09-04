@@ -26,6 +26,7 @@ private variable
 data Ty : Set where
   Unit   : Ty
   _⇒_    : Ty -> Ty -> Ty
+  IO     : Ty
   Bit    : Ty
   U64    : Ty
   Nat    : Ty
@@ -81,6 +82,7 @@ tyEq = go where
 
   go : (s t : Ty) -> SemiDec (s ≡ t)
   go Unit Unit = STrue refl
+  go IO   IO   = STrue refl
   go Bit  Bit  = STrue refl
   go U64  U64  = STrue refl
   go Nat  Nat  = STrue refl
@@ -128,6 +130,7 @@ showTyPrec = go where
 
   go : ℕ -> Ty -> String
   go d Unit        = "Unit"
+  go d IO          = "IO"
   go d Bit         = "Bit"
   go d U64         = "U64"
   go d Nat         = "Nat"

@@ -17,6 +17,7 @@ open import Data.Maybe
 open import Meta.Ty
 open import Meta.Ctx
 open import Meta.PrimOp
+open import Meta.IO
 open import Meta.HList
 open import Meta.Show
 
@@ -107,6 +108,7 @@ data Raw : Set where
   App : Raw -> Raw -> Raw
   Fix : Raw -> Raw
   Pri : RawPrim -> List Raw -> Raw
+  IOp : RawIO Raw -> Raw
   Lit : RVal -> Raw
   Var : (j : ℕ) -> Raw
   Log : String -> Raw -> Raw
@@ -122,6 +124,7 @@ convertToRaw = go where
   go (STLC.Var               j   _   )   = Var (Data.Fin.toℕ j)
   go (STLC.Lit               val     )   = Lit (valForget val)
   go (STLC.Pri               pri     )   = let raw , list = primOpForget go pri in Pri raw list
+  go (STLC.IOp               rawio   )   = IOp (ioForget go rawio)
   go (STLC.Fix               rec     )   = Fix (go rec)
   go (STLC.Log               nam body)   = Log nam (go body)
   
@@ -138,9 +141,10 @@ showRawPrec = go where
   go d (Lit val)         = showParen (d >ᵇ appPrec) ("Lit " ++ showRValPrec appPrec₊₁ val)
   go d (Var j)           = showParen (d >ᵇ appPrec) ("Var " ++ showNat j)
   go d (Pri raw args)    = showParen (d >ᵇ appPrec) ("Pri " ++ showRawPrimPrec appPrec₊₁ raw ++ " " ++ showList (go 0) args)
+  go d (IOp rawio)       = showParen (d >ᵇ appPrec) ("IOp " ++ showRawIOPrec go appPrec₊₁ rawio)
   go d (Fix rec)         = showParen (d >ᵇ appPrec) ("Fix " ++ go appPrec₊₁ rec)
   go d (Log name body)   = showParen (d >ᵇ appPrec) ("Log " ++ showString name ++ " " ++ go appPrec₊₁ body)
-
+ 
 showRaw : Raw -> String
 showRaw = showRawPrec 0 
 

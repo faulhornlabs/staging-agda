@@ -70,9 +70,11 @@ data PrimOp (tm : Ty -> Set) : Ty -> Set where
   NatAdd        : tm Nat -> tm Nat -> PrimOp tm Nat
   NatSubTrunc   : tm Nat -> tm Nat -> PrimOp tm Nat
   NatMul        : tm Nat -> tm Nat -> PrimOp tm Nat
-  -- input / output
+{-
+  -- input / output (the old-style IO hack; it's replaced now by a continuation based IO type)
   Input         : String -> (ty : Ty) -> PrimOp tm ty
   Output        : String -> {ty : Ty} -> tm ty -> PrimOp tm Unit
+-}
 
 --------------------------------------------------------------------------------
 
@@ -133,8 +135,10 @@ mapPrim {tm₁} {tm₂} f what = go what where
   go (NatAdd x y)        = NatAdd (f x) (f y)
   go (NatSubTrunc x y)   = NatSubTrunc (f x) (f y)
   go (NatMul x y)        = NatMul (f x) (f y)
+{-
   go (Input  n t)        = Input n t
   go (Output n y)        = Output n (f y)
+-}
 
 --------------------------------------------------------------------------------
 
@@ -177,8 +181,10 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   go (NatAdd x y)        = (| NatAdd (f x) (f y)             |)
   go (NatSubTrunc x y)   = (| NatSubTrunc (f x) (f y)        |)
   go (NatMul x y)        = (| NatMul (f x) (f y)             |)
+{-
   go (Input  n t)        = pure (Input n t)                    
   go (Output n y)        = (| (Output n) (f y)               |)
+-}
 
 mapMaybePrim
   :  {tm₁ tm₂ : Ty -> Set}
@@ -192,8 +198,11 @@ data RawPrim : Set where
   MkRawPrim : String -> RawPrim
   RawProj   : ℕ -> RawPrim
   RawWrap   : String -> RawPrim
+{-
+  -- the old-style IO hack; it's replaced now by a continuation based IO type
   RawInput  : String -> Ty -> RawPrim
   RawOutput : String -> RawPrim
+-}
 
 showRawPrimPrec : ℕ -> RawPrim -> String
 showRawPrimPrec = go where
@@ -201,8 +210,10 @@ showRawPrimPrec = go where
   go d (MkRawPrim name) = showParen (d >ᵇ appPrec) ("MkRawPrim " ++ showString name)
   go d (RawProj   j)    = showParen (d >ᵇ appPrec) ("RawProj "   ++ showNat j)
   go d (RawWrap   n)    = showParen (d >ᵇ appPrec) ("RawWrap "   ++ showString n)
+{-
   go d (RawInput  n t)  = showParen (d >ᵇ appPrec) ("RawInput "  ++ showString n ++ " " ++ showTyPrec appPrec₊₁ t)
   go d (RawOutput n  )  = showParen (d >ᵇ appPrec) ("RawOutput " ++ showString n)
+-}
 
 primOpForget : {tm : Ty -> Set} -> {A : Set} -> {t : Ty} -> ({t : Ty} -> tm t -> A) -> PrimOp tm t -> RawPrim × List A
 primOpForget {tm} {A} f = go where
@@ -239,7 +250,9 @@ primOpForget {tm} {A} f = go where
   go (NatAdd x y)        = MkRawPrim "NatAdd"        , (f x ∷ f y ∷ [])
   go (NatSubTrunc x y)   = MkRawPrim "NatSubTrunc"   , (f x ∷ f y ∷ [])
   go (NatMul x y)        = MkRawPrim "NatMul"        , (f x ∷ f y ∷ [])
+{-
   go (Input  n t)        = RawInput  n t             , []
   go (Output n y)        = RawOutput n               , (f y ∷ [])
+-}
 
 --------------------------------------------------------------------------------

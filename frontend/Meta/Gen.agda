@@ -10,6 +10,7 @@ open import Data.Nat
 open import Data.List
 open import Data.Vec
 open import Data.Maybe using ( Maybe ; nothing ; just )
+open import Data.String using ( String )
 
 open import Meta.Ty using ( Ty ; Pair )
 open import Meta.HOAS
@@ -60,6 +61,23 @@ pair⇓ : Gen (Tm s × Tm t) ->  Tm (Pair s t)
 pair⇓ action = runGen do
   (x , y) ← action
   return (mkPair x y)
+
+--------------------------------------------------------------------------------
+
+--  data Gen (A : Set) : Set where
+--  MkGen : (∀ {ty} -> (A -> Tm ty) -> Tm ty) -> Gen A
+
+--  halt : Tm IO
+--  halt = IOp Halt
+
+--  get′ : String -> (ty : Ty) -> (Tm ty -> Tm IO) -> Tm IO  
+--  get′ name ty kont = IOp (Get name kont)
+
+--  get : {ty : Ty} -> String -> (Tm ty -> Tm IO) -> Tm IO
+--  get {ty} name kont = get′ name ty kont
+
+--  put : {ty : Ty} -> String -> Tm ty -> Tm IO -> Tm IO
+--  put {ty} name what kont = IOp (Put name what kont)
 
 --------------------------------------------------------------------------------
 -- standard monadic functions specialized to Gen

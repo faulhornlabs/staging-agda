@@ -20,6 +20,7 @@ open import Meta.Ctx
 open import Meta.Val
 open import Meta.HList
 open import Meta.PrimOp
+open import Meta.IO
 
 open import Meta.Ty
 open import Meta.HOAS
@@ -38,6 +39,7 @@ tt = Lit Tt
 
 --------------------------------------------------------------------------------
 
+{-
 module IOLib where
 
   input′ : String -> (ty : Ty) -> Tm ty
@@ -45,6 +47,26 @@ module IOLib where
 
   input : {ty : Ty} -> String -> Tm ty
   input {t} n = Pri (Input n t)
+-}
+
+module IOLib where
+
+  halt : Tm IO
+  halt = IOp Halt
+
+  get′ : String -> (ty : Ty) -> (Tm ty -> Tm IO) -> Tm IO  
+  get′ name ty kont = IOp (Get name kont)
+
+  get : {ty : Ty} -> String -> (Tm ty -> Tm IO) -> Tm IO
+  get {ty} name kont = get′ name ty kont
+
+  put : {ty : Ty} -> String -> Tm ty -> Tm IO -> Tm IO
+  put {ty} name what kont = IOp (Put name what kont)
+
+  putAndHalt : {ty : Ty} -> String -> Tm ty -> Tm IO
+  putAndHalt name what = put name what halt
+  
+open IOLib
 
 --------------------------------------------------------------------------------
 

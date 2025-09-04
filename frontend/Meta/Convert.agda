@@ -26,7 +26,7 @@ open import Meta.Ty
 open import Meta.Ctx
 open import Meta.Val
 open import Meta.PrimOp
--- open import Meta.HList
+open import Meta.IO
 
 open import Meta.HOAS using ( Tm )
 open import Meta.STLC using ( LC )
@@ -48,8 +48,24 @@ private variable
 convert' : Tm ty -> Maybe (LC ctx ty)
 convert' = go where
 
-  go : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> Tm ty -> Maybe (LC ctx ty)
+  go   : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> Tm ty -> Maybe (LC ctx ty)
+  goIO : {n : ℕ} -> {ctx : Ctx n} -> InOut Tm -> Maybe (InOut′ LC ctx)
 
+  --------------------
+  
+  goIO {n} {ctx} Halt = just Halt′
+
+  goIO {n} {ctx} (Put {ty} name what kont) = do
+    what' <- go what
+    kont' <- go kont
+    just (Put′ name what' kont')
+
+  goIO {n} {ctx} (Get {ty} name kont) = do
+    body <- go (kont (HOAS.Var ty n))
+    just (Get′ {LC} {ty} {n} {ctx} name body)
+
+  --------------------
+  
   go {n} {ctx} (HOAS.Var s k) = do
     MkInCtx j t refl <- lkpCtxNatWithProof ctx k
     case tyEq s t of λ where
@@ -76,6 +92,10 @@ convert' = go where
     prim' <- mapMaybePrim go prim
     just (STLC.Pri prim')
 
+  go (HOAS.IOp io) = do
+   io' <- goIO io
+   just (STLC.IOp io')
+     
   go (HOAS.Fix f) = do
     f' <- go f
     just (STLC.Fix f')

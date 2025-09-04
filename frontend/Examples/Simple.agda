@@ -66,6 +66,8 @@ module Big where
   exBinary' : Tm (BigInt 4)
   exBinary' = bitXor (bitOr big1 big2) (bitAnd (bitComplement big1) big3)
 
+{-
+  -- this used the old-style IO hack
   exBinary : Tm (BigInt 4)
   exBinary = runGen do
     x <- gen (input "x")
@@ -73,6 +75,7 @@ module Big where
     z <- gen (input "z")
     let out = bitXor (bitOr x y) (bitAnd (bitComplement x) z)
     return out
+-}
 
 --------------------------------------------------------------------------------
 -- *** FIELD PRIME ***
