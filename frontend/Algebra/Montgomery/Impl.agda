@@ -519,6 +519,10 @@ open import Algebra.Euclid (bigIntAsWordAPI #limbs) using ( modularInv′ ; modu
 --
 --     R*(1/x) = R^2 * (1/Rx) = R^3 *** (1/Rx)
 --
+-- or, alternatively (doesn't need the extra multiplication):
+--
+--     R*(1/x) = R^2 / Rx
+--
 -- hence the R^3 correction factor.
 --
 -- Similarly in division we need R^2:
@@ -527,7 +531,8 @@ open import Algebra.Euclid (bigIntAsWordAPI #limbs) using ( modularInv′ ; modu
 --
 
 inv : Tm Mont -> Tm Mont
-inv x = unwrap1 x \big -> wrap (montMulBig R3 (modularInv′ prime′ big))
+inv x = unwrap1 x \big -> wrap (modularDiv′ prime′ R2 big)
+-- inv x = unwrap1 x \big -> wrap (montMulBig R3 (modularInv′ prime′ big))
 
 div : Tm Mont -> Tm Mont -> Tm Mont
 div x y = unwrap2 x y \big1 big2 -> wrap (montMulBig R2 (modularDiv′ prime′ big1 big2))

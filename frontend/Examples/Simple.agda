@@ -238,8 +238,18 @@ module Bar where
     z     <- gen (MontP.sub x′ x)           -- should be zero
     return (MontP.toBigInt z) 
 
+  exMontInv : Tm (BigInt 4)
+  exMontInv = runGen do
+    x    <- gen (MontP.unsafeFromBigInt Big.big3)
+    invx <- gen (MontP.inv x)
+    one  <- gen (MontP.mul invx x)          -- should be one
+    return (MontP.toBigInt one) 
+
 exMont2 : Tm (BigInt 4)
 exMont2 = Bar.exMont2
+
+exMontInv : Tm (BigInt 4)
+exMontInv = Bar.exMontInv
 
 exMontDiv : Tm (BigInt 4)
 exMontDiv = Bar.exMontDiv

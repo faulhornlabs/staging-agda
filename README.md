@@ -17,16 +17,25 @@ as a proof-of-concept and a learning device.
   - [x] comparison
   - [x] addition, subtraction 
   - [x] multiplication, squaring, scaling
-  - [ ] division
-- [ ] large finite fields
-  - [x] addition, subtraction, negation
-  - [ ] Barrett reduction, multiplication
-  - [x] Montgomery multiplication, squaring
-  - [x] conversion to/from Montgomery representation
-  - [ ] exponentiation
-  - [ ] inversion, division
-  - [ ] batch inversion
-- [ ] field extensions
+  - [ ] long division
+- [ ] finite fields
+  - [ ] generic small prime fields
+  - [ ] large prime fields
+    - [x] addition, subtraction, negation
+    - [ ] standard representation
+        - [ ] Barrett reduction, multiplication
+        - [x] inversion, division
+    - [ ] Montgomery representation
+        - [x] Montgomery multiplication, squaring
+        - [x] conversion to/from Montgomery representation
+        - [x] inversion, division
+    - [ ] exponentiation
+    - [ ] batch inversion
+  - [ ] specific small fields (higher performance than the generic ones)
+     - [ ] Goldilocks 
+     - [ ] Mersenne-31
+     - [ ] Babybear
+  - [ ] generic field extensions
 - [ ] elliptic curves
 - [ ] polynomials
 - [ ] number theoretical transform
