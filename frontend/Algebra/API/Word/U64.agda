@@ -12,6 +12,7 @@ open import Algebra.API.Word
 --------------------------------------------------------------------------------
 
 open U64Lib
+open BitLib
 
 private 
 
@@ -40,6 +41,8 @@ u64AsWordAPI = record
   ; isLT     = ltU64
   ; isLE     = leU64
     -- arithmetic
+  ; addCarry = addCarryU64 zeroBit
+  ; subCarry = subCarryU64 zeroBit
   ; neg   = negU64
   ; add   = addU64
   ; sub   = subU64

@@ -123,7 +123,7 @@ module TinyBaz where
 
   import Algebra.Modular as Modular
 
-  open module ModuloP = Modular tinyPrime 
+  open module ModuloP = Modular tinyPrime
 
   T : Ty
   T = Mod
@@ -140,6 +140,68 @@ module TinyBaz where
 exTinyModInv exTinyModDiv : Tm TinyBaz.T
 exTinyModInv = TinyBaz.exTinyModInv
 exTinyModDiv = TinyBaz.exTinyModDiv
+
+--------------------------------------------------------------------------------
+
+module TinyBazU64 where
+
+  open U64Lib
+  
+  open import Algebra.API.Word.U64 
+
+  open import Algebra.Euclid ( u64AsWordAPI )
+
+  pr : ℕ
+  pr = 1299709 
+  
+  p x y : Tm U64
+  p = kstU64′ pr
+  x = kstU64′ 386048
+  y = kstU64′ 713841
+
+  prime : Prime
+  prime = mkPrime pr
+
+  rx ry : Tm U64
+  rx = modularInv′ prime x
+  ry = modularInv′ prime y
+
+exInvU64xy : Tm (Pair U64 U64)
+exInvU64xy = mkPair TinyBazU64.rx TinyBazU64.ry
+
+exInvU64x exInvU64y : Tm U64
+exInvU64x = TinyBazU64.rx
+exInvU64y = TinyBazU64.ry
+
+--------------------------------------------------------------------------------
+
+module BabyBaz where
+
+  import Algebra.Modular as Modular
+
+  babyPrime : Prime
+  babyPrime = mkPrime 163 -- 61
+  
+  open module ModuloP = Modular babyPrime
+
+  T : Ty
+  T = Mod
+
+  baby1 baby2 : Tm (BigInt 1)
+  baby1 = bigIntFromℕ 17
+  baby2 = bigIntFromℕ 23
+
+  mod1 mod2  : Tm Mod
+  mod1 = wrap baby1
+  mod2 = wrap baby2
+
+  exBabyModInv exBabyModDiv : Tm Mod
+  exBabyModInv = ModuloP.inv mod1
+  exBabyModDiv = ModuloP.div mod1 mod2
+
+exBabyModInv exBabyModDiv : Tm BabyBaz.T
+exBabyModInv = BabyBaz.exBabyModInv
+exBabyModDiv = BabyBaz.exBabyModDiv
 
 --------------------------------------------------------------------------------
 -- *** MONTGOMERY ***

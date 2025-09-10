@@ -10,6 +10,9 @@ import Algebra.BigInt as B
 
 open import Algebra.API.Word
 
+import Meta.Lib 
+open Meta.Lib.BitLib
+
 --------------------------------------------------------------------------------
 
 bigIntAsWordAPI : ℕ -> WordAPI
@@ -23,6 +26,8 @@ bigIntAsWordAPI nlimbs =  record
   ; isLT     = B.isLT
   ; isLE     = B.isLE
     -- arithmetic
+  ; addCarry = B.addCarry zeroBit
+  ; subCarry = B.subCarry zeroBit
   ; neg   = B.neg
   ; add   = B.addNC
   ; sub   = B.subNC

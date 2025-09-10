@@ -112,21 +112,23 @@ data Raw : Set where
   Lit : RVal -> Raw
   Var : (j : ℕ) -> Raw
   Log : String -> Raw -> Raw
+  Dbg : String -> Ty -> Raw -> Raw -> Raw
   
 {-# TERMINATING #-}
 convertToRaw : STLC.LC ctx t -> Raw
 convertToRaw = go where
 
   go : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> STLC.LC ctx ty -> Raw
-  go (STLC.Lam           {s} body    )   = Lam s (go body)
-  go (STLC.Let {n} {ctx} {s} rhs body)   = Let s (go rhs) (go body)
-  go (STLC.App               fun arg )   = App (go fun) (go arg)
-  go (STLC.Var               j   _   )   = Var (Data.Fin.toℕ j)
-  go (STLC.Lit               val     )   = Lit (valForget val)
-  go (STLC.Pri               pri     )   = let raw , list = primOpForget go pri in Pri raw list
-  go (STLC.IOp               rawio   )   = IOp (ioForget go rawio)
-  go (STLC.Fix               rec     )   = Fix (go rec)
-  go (STLC.Log               nam body)   = Log nam (go body)
+  go (STLC.Lam {s = s} body    )   = Lam s (go body)
+  go (STLC.Let {s = s} rhs body)   = Let s (go rhs) (go body)
+  go (STLC.App         fun arg )   = App (go fun) (go arg)
+  go (STLC.Var         j   _   )   = Var (Data.Fin.toℕ j)
+  go (STLC.Lit         val     )   = Lit (valForget val)
+  go (STLC.Pri         pri     )   = let raw , list = primOpForget go pri in Pri raw list
+  go (STLC.IOp         rawio   )   = IOp (ioForget go rawio)
+  go (STLC.Fix         rec     )   = Fix (go rec)
+  go (STLC.Log         nam body)   = Log nam (go body)
+  go (STLC.Dbg {s = s} nam x y )   = Dbg nam s (go x) (go y)
   
 --------------------------------------------------------------------------------
 
@@ -144,6 +146,7 @@ showRawPrec = go where
   go d (IOp rawio)       = showParen (d >ᵇ appPrec) ("IOp " ++ showRawIOPrec go appPrec₊₁ rawio)
   go d (Fix rec)         = showParen (d >ᵇ appPrec) ("Fix " ++ go appPrec₊₁ rec)
   go d (Log name body)   = showParen (d >ᵇ appPrec) ("Log " ++ showString name ++ " " ++ go appPrec₊₁ body)
+  go d (Dbg name ty x y) = showParen (d >ᵇ appPrec) ("Dbg " ++ showString name ++ " " ++ showTyPrec appPrec₊₁ ty ++ " " ++ go appPrec₊₁ x ++ " " ++ go appPrec₊₁ y)
  
 showRaw : Raw -> String
 showRaw = showRawPrec 0 

@@ -38,5 +38,6 @@ data LC : Ctx n -> (ty : Ty) -> Set where
   Lit : Val t -> LC ctx t
   Var : (j : Fin n) -> lkpCtx ctx j ≡ t -> LC {n} ctx t
   Log : String -> LC ctx t -> LC ctx t
+  Dbg : String -> LC ctx s -> LC ctx t -> LC ctx t
   
 --------------------------------------------------------------------------------

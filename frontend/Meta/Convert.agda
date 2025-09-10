@@ -103,6 +103,12 @@ convert' = go where
   go (HOAS.Log n x) = do
     x' <- go x
     just (STLC.Log n x')
+
+  go (HOAS.Dbg n x y) = do
+    x' <- go x
+    y' <- go y
+    just (STLC.Dbg n x' y')
+  
       
 convert : Tm ty -> Maybe (LC [] ty)
 convert = convert'

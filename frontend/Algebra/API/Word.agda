@@ -22,6 +22,8 @@ record WordAPI : Set where
     isLT     : Tm Word -> Tm Word -> Tm Bit
     isLE     : Tm Word -> Tm Word -> Tm Bit
     -- arithmetic
+    addCarry : Tm Word -> Tm Word -> Tm (Pair Bit Word)
+    subCarry : Tm Word -> Tm Word -> Tm (Pair Bit Word)
     neg   : Tm Word -> Tm Word
     add   : Tm Word -> Tm Word -> Tm Word
     sub   : Tm Word -> Tm Word -> Tm Word

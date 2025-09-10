@@ -50,6 +50,9 @@ runGen (MkGen f) = f id where
 gen : Tm ty -> Gen (Tm ty)
 gen tm = MkGen \k -> Let tm \x -> k x 
 
+debug : String -> Tm s -> Gen ⊤
+debug name what = MkGen \k -> Dbg name what (k tt)
+
 --------------------------------------------------------------------------------
 
 pair⇑ : Tm (Pair s t) -> Gen (Tm s × Tm t)
@@ -61,7 +64,7 @@ pair⇓ : Gen (Tm s × Tm t) ->  Tm (Pair s t)
 pair⇓ action = runGen do
   (x , y) ← action
   return (mkPair x y)
-
+  
 --------------------------------------------------------------------------------
 
 --  data Gen (A : Set) : Set where

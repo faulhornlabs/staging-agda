@@ -40,7 +40,8 @@ data Tm : (ty : Ty) -> Set where
   Lit : Val t -> Tm t
   Var : (s : Ty) -> (l : ℕ) -> Tm s        -- this is only for conversion to first order syntax
   Log : String -> Tm t -> Tm t             -- this is a hack to be able give names to subexpressions
-
+  Dbg : String -> Tm s -> Tm t -> Tm t     -- printf debugging hack
+  
 --------------------------------------------------------------------------------
 
 Lam2 : (Tm s -> Tm t -> Tm u) -> Tm (s ⇒ t ⇒ u)

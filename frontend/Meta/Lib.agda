@@ -39,6 +39,11 @@ tt = Lit Tt
 
 --------------------------------------------------------------------------------
 
+debug′ : String -> Tm s -> Tm t -> Tm t
+debug′ = Dbg
+
+--------------------------------------------------------------------------------
+
 {-
 module IOLib where
 
@@ -66,8 +71,6 @@ module IOLib where
   putAndHalt : {ty : Ty} -> String -> Tm ty -> Tm IO
   putAndHalt name what = put name what halt
   
-open IOLib
-
 --------------------------------------------------------------------------------
 
 ifte : Tm Bit -> Tm s -> Tm s -> Tm s
@@ -189,7 +192,7 @@ module U64Lib where
   minusOneU64 = kstU64 (Data.Word64.fromℕ 0xffffffffffffffff)
 
   ----------------------------------------
-
+ 
   hiWordOf : Tm U128 -> Tm U64
   hiWordOf = fst
 
@@ -242,7 +245,7 @@ module U64Lib where
   rotLeftU64 c x = Pri (RotLeftU64 c x)
 
   rotRightU64 : Tm Bit -> Tm U64 -> Tm (Pair Bit U64)
-  rotRightU64 c x = Pri (RotLeftU64 c x)
+  rotRightU64 c x = Pri (RotRightU64 c x)
 
   open BitLib
   
