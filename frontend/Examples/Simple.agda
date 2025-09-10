@@ -227,10 +227,22 @@ module Bar where
     tmp₁ <- gen (MontP.mul x y)
     tmp₂ <- gen (MontP.add tmp₁ z)
     tmp₃ <- gen (MontP.toBigInt tmp₂)
-    Meta.Object.return tmp₃
+    return tmp₃
+
+  exMontDiv : Tm (BigInt 4)
+  exMontDiv = runGen do
+    x <- gen (MontP.unsafeFromBigInt Big.big1)
+    y <- gen (MontP.unsafeFromBigInt Big.big2)
+    xpery <- gen (MontP.div x y)
+    x′    <- gen (MontP.mul y xpery)
+    z     <- gen (MontP.sub x′ x)           -- should be zero
+    return (MontP.toBigInt z) 
 
 exMont2 : Tm (BigInt 4)
 exMont2 = Bar.exMont2
+
+exMontDiv : Tm (BigInt 4)
+exMontDiv = Bar.exMontDiv
 
 ----------------------------------------
 
@@ -268,7 +280,7 @@ module Foo where
       tmp₁ <- gen (mul x y)
       tmp₂ <- gen (add tmp₁ z)
       tmp₃ <- gen (exportMont eq4 tmp₂)
-      Meta.Object.return tmp₃
+      return tmp₃
 
   exMont2b : Tm (BigInt 4)
   exMont2b = Inst.withMontgomery thePrime exMont2b'

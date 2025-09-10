@@ -121,10 +121,10 @@ private
     R1-ℕ = R-full-ℕ % prime
 
     R2-ℕ : ℕ
-    R2-ℕ = (R-full-ℕ * R-full-ℕ) % prime
+    R2-ℕ = (R1-ℕ * R1-ℕ) % prime
 
     R3-ℕ : ℕ
-    R3-ℕ = (R-full-ℕ * R-full-ℕ * R-full-ℕ) % prime
+    R3-ℕ = (R2-ℕ * R1-ℕ) % prime
 
   R1' : Tm Big'
   R1' = Lit (bigInt'ValFromℕ R1-ℕ)
@@ -423,20 +423,34 @@ end function
 
 --------------------------------------------------------------------------------
 
-mul' : Tm (Big² ⇒ Big) -> Tm Mont -> Tm Mont -> Tm Mont
-mul' redc mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> runGen do
+-- \A B -> R^-1*(A*B) mod P 
+montMulBig' : Tm (Big² ⇒ Big) -> Tm Big -> Tm Big -> Tm Big
+montMulBig' redc big1 big2 = runGen do
   prod <- gen (BigInt.mulExt big1 big2)
-  return (wrap (App redc prod))
+  return (App redc prod)
+
+mul' : Tm (Big² ⇒ Big) -> Tm Mont -> Tm Mont -> Tm Mont
+mul' redc mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> wrap (montMulBig' redc big1 big2)
+-- mul' redc mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> runGen do
+--   prod <- gen (BigInt.mulExt big1 big2)
+--   return (wrap (App redc prod))
 
 square' : Tm (Big² ⇒ Big) -> Tm Mont -> Tm Mont
 square' redc mont = unwrap1 mont \big -> runGen do
   prod <- gen (BigInt.squareExt big)
   return (wrap (App redc prod))
 
-mul : Tm Mont -> Tm Mont -> Tm Mont
-mul mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> runGen do
+-- \A B -> R^-1*(A*B) mod P 
+montMulBig : Tm Big -> Tm Big -> Tm Big
+montMulBig  big1 big2 = runGen do
   prod <- gen (BigInt.mulExt big1 big2)
-  return (wrap (montgomeryREDC prod))
+  return (montgomeryREDC prod)
+
+mul : Tm Mont -> Tm Mont -> Tm Mont
+mul mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> wrap (montMulBig big1 big2)
+-- mul mont1 mont2 = unwrap2 mont1 mont2 \big1 big2 -> runGen do
+--   prod <- gen (BigInt.mulExt big1 big2)
+--   return (wrap (montgomeryREDC prod))
 
 square : Tm Mont -> Tm Mont
 square mont = unwrap1 mont \big -> runGen do
@@ -490,4 +504,32 @@ staticPow base expo = staticPow' square mul base expo
 
 --------------------------------------------------------------------------------
 
+open import Algebra.API.Word.BigInt
 
+open import Algebra.Euclid (bigIntAsWordAPI #limbs) using ( modularInv′ ; modularDiv′ )
+
+--
+-- Remark: as we use Montgomery multiplicatation *** here (not normal modulo P multiplication *),
+-- that adds an extra R^-1 factor:
+--
+--     x *** y  :=  R^-1 * (x * y)
+--    Rx *** Ry  =     R * (x * y)
+--
+-- which we need to compensate for:
+--
+--     R*(1/x) = R^2 * (1/Rx) = R^3 *** (1/Rx)
+--
+-- hence the R^3 correction factor.
+--
+-- Similarly in division we need R^2:
+--
+--     R*(x/y) = R*(Rx/Ry) = R^2 *** (Rx/Ry)
+--
+
+inv : Tm Mont -> Tm Mont
+inv x = unwrap1 x \big -> wrap (montMulBig R3 (modularInv′ prime′ big))
+
+div : Tm Mont -> Tm Mont -> Tm Mont
+div x y = unwrap2 x y \big1 big2 -> wrap (montMulBig R2 (modularDiv′ prime′ big1 big2))
+
+--------------------------------------------------------------------------------
