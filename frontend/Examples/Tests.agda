@@ -115,3 +115,30 @@ letFunTest = runGen do
   hvar <- gen $ Lam2 \a b -> mulTruncU64 (App2 fvar a b) (App gvar (mulTruncU64 a b))
   return $ App2 hvar (kstU64′ 5) (kstU64′ 7)
   
+--------------------------------------------------------------------------------
+
+recAdd : Tm U64 -> Tm U64 -> Tm U64
+recAdd x y = App f y where
+  +₁ -₁ : Tm U64 -> Tm U64
+  +₁ x = addU64 x oneU64
+  -₁ x = subU64 x oneU64
+  add : Tm (U64 ⇒ U64) -> Tm (U64 ⇒ U64)
+  add rec = Lam \y -> ifte (isZeroU64 y) x (+₁ (App rec (-₁ y)))
+  f : Tm (U64 ⇒ U64)
+  f = Fix (Lam add)
+
+recMul : Tm U64 -> Tm U64 -> Tm U64
+recMul a b = App g b where
+  +ₐ -₁ : Tm U64 -> Tm U64
+  +ₐ x = recAdd x a  --  addU64 x a
+  -₁ x = subU64 x oneU64
+  mul : Tm (U64 ⇒ U64) -> Tm (U64 ⇒ U64)
+  mul rec = Lam \y -> ifte (isZeroU64 y) zeroU64 (+ₐ (App rec (-₁ y)))
+  g : Tm (U64 ⇒ U64)
+  g = Fix (Lam mul)
+
+exRecAdd exRecMul : Tm U64
+exRecAdd = App2 (Lam2 recAdd) (kstU64′ 7) (kstU64′ 5)
+exRecMul = App2 (Lam2 recMul) (kstU64′ 7) (kstU64′ 5)
+
+--------------------------------------------------------------------------------

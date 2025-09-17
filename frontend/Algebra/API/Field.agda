@@ -27,8 +27,8 @@ record FieldAPI : Set where
     sub   : Tm F -> Tm F -> Tm F
     sqr   : Tm F -> Tm F
     mul   : Tm F -> Tm F -> Tm F
---    inv   : Tm F -> Tm F  
---    div   : Tm F -> Tm F -> Tm F
+    inv   : Tm F -> Tm F  
+    div   : Tm F -> Tm F -> Tm F
 --    divBySmallConst : Tm F -> ℕ -> Tm F
     -- exponentiation
 --    staticPow : Tm F -> ℕ -> Tm F

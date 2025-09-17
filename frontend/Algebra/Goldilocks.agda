@@ -130,6 +130,23 @@ sqr x = mul x x
 
 --------------------------------------------------------------------------------
 
+open import Algebra.Prime
+open import Algebra.API.Word.U64
+
+open import Algebra.Euclid (u64AsWordAPI) using ( modularInv′ ; modularDiv′ )
+
+private
+  prime′ : Prime
+  prime′ = mkPrime theGoldilocksPrime
+
+inv : Tm F -> Tm F
+inv x = with1 (modularInv′ prime′) x
+
+div : Tm F -> Tm F -> Tm F
+div x y = with2 (modularDiv′ prime′) x y
+
+--------------------------------------------------------------------------------
+
 open import Algebra.API.Field
 
 goldilocksAPI : FieldAPI
@@ -149,8 +166,8 @@ goldilocksAPI = record
   ; sub   = sub
   ; sqr   = sqr
   ; mul   = mul
---    inv   : Tm F -> Tm F  
---    div   : Tm F -> Tm F -> Tm F
+  ; inv   = inv
+  ; div   = div
 --    divBySmallConst : Tm F -> ℕ -> Tm F
     -- exponentiation
 --    staticPow : Tm F -> ℕ -> Tm F

@@ -43,6 +43,8 @@ record MontgomeryAPI (p : Prime) : Set where
     sub    : Tm Mont -> Tm Mont -> Tm Mont
     sqr    : Tm Mont -> Tm Mont
     mul    : Tm Mont -> Tm Mont -> Tm Mont
+    inv    : Tm Mont -> Tm Mont
+    div    : Tm Mont -> Tm Mont -> Tm Mont
 --    staticPow : Tm Mont -> ℕ -> Tm Mont
 
 --------------------------------------------------------------------------------
@@ -68,8 +70,8 @@ montgomeryApiToFieldAPI {prime} mont = api where
     ; sub   = MontgomeryAPI.sub mont
     ; sqr   = MontgomeryAPI.sqr mont
     ; mul   = MontgomeryAPI.mul mont
---    ; inv   : Tm F -> Tm F  
---    ; div   : Tm F -> Tm F -> Tm F
+    ; inv   = MontgomeryAPI.inv mont
+    ; div   = MontgomeryAPI.div mont
 --    ; divBySmallConst : Tm F -> ℕ -> Tm F
     -- exponentiation
 --    ; staticPow = MontgomeryAPI.staticPow mont
@@ -119,7 +121,10 @@ withMontgomery {ty} prime kont = final where
 
     sqrFun <- gen (Log "montSqr" (Lam  (MontP.square' redcFun)))
     mulFun <- gen (Log "montMul" (Lam2 (MontP.mul'    redcFun)))
- 
+
+    invFun <- gen (Log "montInv" (Lam  MontP.inv))
+    divFun <- gen (Log "montDiv" (Lam2 MontP.div))
+
     -- cannot really "gen" this???
     -- staticPowFun <- gen ...
     
@@ -141,6 +146,8 @@ withMontgomery {ty} prime kont = final where
           ; sub    = App2 subFun
           ; sqr    = App  sqrFun
           ; mul    = App2 mulFun
+          ; inv    = App  invFun
+          ; div    = App2 divFun
 --          ; staticPow = \base expo -> App (staticPowFun expo) base 
           }
 
