@@ -1,5 +1,5 @@
 
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PatternSynonyms, ScopedTypeVariables #-}
 module Run.Eval.Monadic where
 
 --------------------------------------------------------------------------------
@@ -12,6 +12,7 @@ import qualified Data.Sequence as Seq ; import Data.Sequence ( Seq , (|>) , (><)
 import qualified Data.Foldable as F
 
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.State.Strict
 
 import AST.Ty
@@ -22,6 +23,7 @@ import AST.Term
 import CodeGen.Lifting
 import CodeGen.ANF
 
+import Run.Monad
 import Run.Input
 import Run.Prim
 
@@ -39,17 +41,20 @@ runWithInputs action inputs x =
 evalWithInputs :: Inputs -> Raw -> (Outputs, ValM)
 evalWithInputs = runWithInputs evalM
 
-evalM :: Raw -> EvalM ValM
+evalM :: EvalMonad m => Raw -> m (Val' m)
 evalM = evalInEnvM Seq.empty emptyEnv
+
+evalIO :: Raw -> IO ValIO
+evalIO = evalM
 
 --------------------------------------------------------------------------------
 
 pattern Fun f = FunV (MkFun f)
 
-evalInEnvM :: Seq (FunDef Raw) -> EnvM -> Raw -> EvalM ValM
+evalInEnvM :: forall m. EvalMonad m => Seq (FunDef Raw) -> Env' m -> Raw -> m (Val' m)
 evalInEnvM topEnv = go where
 
-  go ::  EnvM -> Raw -> EvalM ValM
+  go ::  Env' m -> Raw -> m (Val' m)
   go env term = case term of
 
     Lam _ty body -> return $ Fun (\x -> go (env |> x) body)
@@ -67,7 +72,7 @@ evalInEnvM topEnv = go where
     Fix fun -> do
       fun' <- go env fun
       case fun' of
-        Fun f -> evalFixM f
+        Fun f -> mfix f -- evalFixM f
         _     -> error "evalInEnvM: fixpoint of a non-lambda"
 
     Pri op args  -> do
@@ -82,10 +87,18 @@ evalInEnvM topEnv = go where
 
     Log _ body -> go env body
 
-evalFixM :: (ValM -> EvalM ValM) -> EvalM ValM
-evalFixM f = f =<< (evalFixM f) 
+    Dbg name ty x y -> do
+      x' <- go env x
+      debugPrint name x'
+      go env y
 
-runProgramM :: Program Raw -> EvalM ValM
+{-
+evalFixM :: EvalMonad m => (Val' m -> m (Val' m)) -> m (Val' m)
+evalFixM f = mfix f
+-- evalFixM f = f =<< (evalFixM f) 
+-}
+
+runProgramM :: EvalMonad m => Program Raw -> m (Val' m)
 runProgramM (MkProgram tops main) = evalInEnvM tops Seq.empty main
 
 runProgramWithInputs :: Inputs -> Program Raw -> (Outputs, ValM)
@@ -125,23 +138,23 @@ type ANFE = ANF (Typed ExpA)
   }
 -}
 
-evalAnfInEnvM :: Seq (FunDef ANFE) -> EnvM -> ANFE -> EvalM ValM
+evalAnfInEnvM :: forall m. EvalMonad m => Seq (FunDef ANFE) -> Env' m -> ANFE -> m (Val' m)
 evalAnfInEnvM topEnv = goANF where
 
-  goAtom :: EnvM -> Atom -> EvalM ValM
+  goAtom :: Env' m -> Atom -> m (Val' m)
   goAtom locEnv atom = case atom of
     VarA j -> return $ Seq.index locEnv j
     KstA v -> return $ castVal v
     TopA k -> error "evalANF: trying to evaluate top-level lambda"
 
-  goTyExp ::  EnvM -> Typed ExpA -> EvalM ValM
+  goTyExp ::  Env' m -> Typed ExpA -> m (Val' m)
   goTyExp env (MkTyped ty expr) = goExp env expr
 
-  goApp :: EnvM -> FunDef ANFE -> [ValM] -> EvalM ValM
+  goApp :: Env' m -> FunDef ANFE -> [Val' m] -> m (Val' m)
   goApp env (MkFunDef _idx _name funTy body _fix) args = 
     goANF (Seq.fromList args) body
     
-  goExp :: EnvM -> ExpA -> EvalM ValM
+  goExp :: Env' m -> ExpA -> m (Val' m)
   goExp env expr = case expr of
 
     AtmE atom -> goAtom env atom
@@ -158,20 +171,20 @@ evalAnfInEnvM topEnv = goANF where
       cond' <- goAtom env cond
       goIfte env cond' tbr fbr
 
-  goIfte :: EnvM -> ValM -> ANFE -> ANFE -> EvalM ValM
+  goIfte :: Env' m -> Val' m -> ANFE -> ANFE -> m (Val' m)
   goIfte env cond tbr fbr = case cond of 
     BitV True  -> goANF env tbr
     BitV False -> goANF env fbr
     _          -> error "evalANF: IFTE: condition is not a boolean"
     
-  goANF :: EnvM -> ANFE -> EvalM ValM
+  goANF :: Env' m -> ANFE -> m (Val' m)
   goANF env0 (MkANF lets expr) = worker env0 (F.toList lets) where
     worker env []     = goTyExp env expr
     worker env (u:us) = do
       v <- goTyExp env u 
       worker (env |> v) us
 
-runANFProgramM :: Program ANFE -> EvalM ValM
+runANFProgramM :: EvalMonad m => Program ANFE -> m (Val' m)
 runANFProgramM (MkProgram tops main) = evalAnfInEnvM tops Seq.empty main
 
 runANFProgramWithInputs :: Inputs -> Program ANFE -> (Outputs, ValM)

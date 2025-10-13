@@ -278,9 +278,10 @@ cgenPrimOp primArgs = case primArgs of
   MkPrim (MkRawPrim prim   ) args     -> cgenNormalPrim (prim, args)
   MkPrim (RawProj   j      ) [struct] -> cgenAtom struct ++ "._field" ++ show j
   MkPrim (RawWrap   name   ) [x]      -> cgenAtom x
+{-
   MkPrim (RawInput  name ty) []       -> error "cgenPrimOp: input: not implemented"
   MkPrim (RawOutput name   ) [x]      -> error "cgenPrimOp: output: not implemented"
-
+-}
   _ -> error "cgenPrimOp: invalid combination"
 
 --------------------------------------------------------------------------------

@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 data Ty where
   Unit   :: Ty
   Arrow  :: Ty -> Ty -> Ty
+  IO_    :: Ty
   Bit    :: Ty
   U64    :: Ty
   Nat    :: Ty

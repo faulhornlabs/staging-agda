@@ -16,29 +16,11 @@ import AST.Ty
 import AST.Val
 import AST.PrimOp
 
+import Run.Monad
 import Run.Input
 import Run.Semantics
 
 import Aux.Misc
-
---------------------------------------------------------------------------------
-
-data EvalState = MkEvalS 
-  { _inputs   :: Map String Integer
-  , _outputs  :: Map String Integer
-  }
-  deriving (Eq,Show)
-
-emptyEvalState :: EvalState
-emptyEvalState = MkEvalS
-  { _inputs  = Map.empty
-  , _outputs = Map.empty
-  }
-
-type EvalM a = State EvalState a
-
-type ValM = Val' (State EvalState)
-type EnvM = Env' (State EvalState)
 
 --------------------------------------------------------------------------------
 
@@ -53,20 +35,23 @@ evalPrimOpPure primArgs = case primArgs of
   MkPrim (MkRawPrim prim   ) args          -> evalNormalPrim (prim, args)
   MkPrim (RawProj   j      ) [StructV xs]  -> xs !! j
   MkPrim (RawWrap   name   ) [x]           -> WrapV name x
+{-
   MkPrim (RawInput  name ty) []            -> error "evalPrimOp: input"
   MkPrim (RawOutput name   ) [x]           -> error "evalPrimOp: output"
+-}
 
   _ -> error "evalPrimOp: invalid combination"
 
 --------------------
 
-evalPrimOpMonadic :: Prim ValM -> EvalM ValM
+evalPrimOpMonadic :: EvalMonad m => Prim (Val' m) -> m (Val' m)
 evalPrimOpMonadic primArgs = case primArgs of
 
   MkPrim (MkRawPrim prim   ) args          -> return $ evalNormalPrim (prim, args)
   MkPrim (RawProj   j      ) [StructV xs]  -> return $ xs !! j
   MkPrim (RawWrap   name   ) [x]           -> return $ WrapV name x
 
+{-
   MkPrim (RawInput  name ty) []  -> do
     inputs <- _inputs <$> get
     case Map.lookup name inputs of
@@ -84,6 +69,7 @@ evalPrimOpMonadic primArgs = case primArgs of
         let new = old { _outputs = outputs' }
         put new
         return TtV
+-}
 
   _ -> error "evalPrimOp: invalid combination"
 

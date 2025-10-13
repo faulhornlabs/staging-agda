@@ -14,6 +14,8 @@ import qualified Data.Foldable as F
 import Control.Monad
 import Control.Monad.Identity
 
+import Debug.Trace
+
 import AST.Ty
 import AST.Val
 import AST.PrimOp
@@ -60,6 +62,9 @@ evalInEnv topEnv = go where
     Var j             -> Seq.index env j
     Top k             -> go Seq.empty $ funDefToLam (Seq.index topEnv k)
     Log _ body        -> go env body
+    Dbg n _ x body    -> 
+      let s = ">>> " ++ n ++ " = " ++ show (go env x)
+      in  trace s $ go env body
 
 evalFix :: (Val -> Val) -> Val
 evalFix f = f (evalFix f) 

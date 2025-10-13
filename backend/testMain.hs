@@ -29,10 +29,17 @@ import Big.Limbs
 -- main = main_Lift
 -- main = main_Lam
 -- main = main_ModP 
-main = main_binary
+-- main = main_binary
 -- main = main_Mod1
 -- main = main_Small1
 -- main = main_Nat
+
+-- main = main_modInv
+-- main = main_tiny_modInv
+-- main = main_baby_modInv
+-- main = main_montDiv
+-- main = main_recAdd
+main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
 
 main_binary = do
   runCommon "examples/ex_binary.ast" $ \_ -> return ()
@@ -62,6 +69,9 @@ main_Small1 = do
 main_Mod1 = do
   runCommon "examples/ex_mod1.ast" $ \_ -> return ()
 
+main_recAdd = do
+--  runCommon "examples/ex_recadd.ast" $ \_ -> return ()
+  runCommon "examples/ex_recmul.ast" $ \_ -> return ()
 
 main_ModP = do
   runCommon "examples/ex.ast" $ \res -> case res of
@@ -76,6 +86,72 @@ main_ModP = do
     z = 10734482926936635597888852654981536388697257091861152194513442686302125663795
     xplusy = mod (x+y) p
     expected = xplusy
+
+main_montDiv = do
+  runCommon "examples/ex_montdiv.ast" $ \res -> case res of
+    WrapV _ bigint -> do
+      printBigIntVal bigint
+
+main_modInv = do
+  putStrLn $ "expected inv : " ++ show invx
+  putStrLn $ "expected div : " ++ show divxy
+  putStrLn $ "sanity #1 (should be 1) = " ++ show sanity1 
+  putStrLn $ "sanity #2 (should be 1) = " ++ show sanity2
+  putStrLn $ "expected inv limbs : " ++ show (integerToLimbs 4 invx)
+  putStrLn $ "expected div limbs : " ++ show (integerToLimbs 4 divxy)
+  runCommon "examples/ex_modinv.ast" $ \res -> case res of
+    WrapV _ bigint -> do
+      printBigIntVal bigint
+  where
+    p = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+    x = 12535032671501493392438659292886563663979619812816639413586309554197071221275
+    y = 20670156704232560809430694243501641649572216251781105022963497476851362916519
+    -- from mathematica, because i don't have an inverse implementation here at hand
+    invx = 20497519080257943986776131743913968879269810845517545049759101570108377018150
+    invy = 9722546401593205226690879571419363794059601560122949494573692666275298887729
+    divxy   = mod (x*invy) p
+    sanity1 = mod (x*invx) p 
+    sanity2 = mod (y*invy) p 
+
+main_tiny_modInv = do
+  putStrLn $ "expected inv : " ++ show invx
+  putStrLn $ "expected div : " ++ show divxy
+  putStrLn $ "sanity #1 (should be 1) = " ++ show sanity1 
+  putStrLn $ "sanity #2 (should be 1) = " ++ show sanity2
+  runCommon "examples/ex_modinv.ast" $ \res -> case res of
+    WrapV _ bigint -> do
+      printBigIntVal bigint
+  where
+    p = 1299709
+    x = 386048
+    y = 713841
+    -- from mathematica, because i don't have an inverse implementation here at hand
+    invx = 1013280
+    invy = 590558
+    divxy   = mod (x*invy) p
+    sanity1 = mod (x*invx) p 
+    sanity2 = mod (y*invy) p 
+
+main_baby_modInv = do
+  putStrLn $ "expected inv1 : " ++ show invx
+  putStrLn $ "expected inv2 : " ++ show invy
+  putStrLn $ "expected div  : " ++ show divxy
+  putStrLn $ "sanity #1 (should be 1) = " ++ show sanity1 
+  putStrLn $ "sanity #2 (should be 1) = " ++ show sanity2
+  runCommon "examples/ex_modinv.ast" $ \res -> case res of
+    WrapV _ bigint -> do
+      printBigIntVal bigint
+  where
+    p = 61
+    x = 17
+    y = 23
+    -- from mathematica, because i don't have an inverse implementation here at hand
+    invx = 18
+    invy =  8
+    divxy   = mod (x*invy) p
+    sanity1 = mod (x*invx) p 
+    sanity2 = mod (y*invy) p 
+
 
 main_MontP = do
   runCommon' False "examples/ex_mont2d.ast" $ \res -> case res of
@@ -114,6 +190,9 @@ runCommon' printAstFlag fname kont = do
         print ast
 
       let res = eval ast
+      -- resIO <- evalIO ast
+      -- let res = castVal resIO :: Val
+
       putStrLn $ "\neval result = " ++ show res
 
       let program = lambdaLifting ast

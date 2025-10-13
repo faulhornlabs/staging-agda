@@ -26,6 +26,10 @@ data InOut (tm : Ty -> Set) : Set where
   Halt :                               InOut tm 
   Get  : String -> (tm ty -> tm IO) -> InOut tm
   Put  : String ->  tm ty -> tm IO  -> InOut tm
+  -- Malloc
+  -- Free
+
+-- withAlloc ...
 
 ----------------------------------------
 -- STLC version

@@ -9,7 +9,13 @@ import Debug.Trace
 
 --------------------------------------------------------------------------------
 
-debug s x y = trace (">>> " ++ s ++ " -> " ++ show x) y
+debug' :: Show a => Bool -> String -> a -> b -> b
+debug' lf s x y = trace (newline ++ ">>> " ++ s ++ " = " ++ show x) y where
+  newline = if lf then "\n" else ""
+
+debug, debugln :: Show a => String -> a -> b -> b
+debug   = debug' False
+debugln = debug' True
 
 --------------------------------------------------------------------------------
 

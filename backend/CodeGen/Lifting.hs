@@ -46,7 +46,7 @@ data FunDef a = MkFunDef
   , _funName :: !String      -- ^ name of the function
   , _funType :: !FunTy       -- ^ type signature of the function
   , _funBody :: !a           -- ^ function body
-  , _funFix  :: !Bool        -- ^ Is it a fixpoint
+  , _funFix  :: !Bool        -- ^ is it a fixpoint
   }
   deriving (Eq,Show,Functor)
 
@@ -102,6 +102,7 @@ outsideVariables level0 input = execState (go input) Set.empty where
     Pri op args    -> mapM_ go args
     Lit val        -> return ()
     Log name body  -> go body
+    Dbg name t x y -> go x >> go y
 
 --------------------------------------------------------------------------------
 
@@ -225,7 +226,20 @@ lambdaLifting raw =
           let localCtx   = Seq.fromList fullArgTys :: Context
           MkS topCtx topFuns topCnt <- get
           let retTy = inferTy topCtx (fmap entryTy localCtx) body'
+      
+          debugln "level" level $
+           debug "freeTys" freeTys $
+           debug "origArgTys" origArgTys $
+           debug "localCtx" localCtx $
+           debug "isfix" isFix $
+           debug "retTy"  retTy  $ return ()
+
           body'' <- go fullArity localCtx body
+
+          debugln "body'"  body'  $
+           debug "body''" body'' $ 
+            return ()
+
           case isFix of
 
             False -> do
@@ -237,13 +251,16 @@ lambdaLifting raw =
                     , _funFix  = isFix
                     }
                   thisTy = fromFunTy (_funType this)
-              put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
+              debugln "ty" thisTy $ 
+               debug "def" this $ 
+                put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
 
             True -> do
               let recTy = MkFunTy (map entryTy fullArgTys) retTy
-              case fromFunTy recTy of
+              let typ   = fromFunTy recTy
+              case typ of
                 Arrow s t -> if s /= t
-                  then error "lambdaLifting: invalid type inside fixpoint"
+                  then error $ "lambdaLifting: invalid type inside fixpoint:\n  " ++ show typ
                   else do
                     let thisTy    = s
                     let thisFunTy = toFunTy thisTy
@@ -259,8 +276,10 @@ lambdaLifting raw =
                           , _funBody = body'''
                           , _funFix  = isFix
                           }
-                    put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
-
+                    debugln "recty" thisTy $ 
+                     debug "recdef" this $ 
+                      put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
+  
                 _ -> error "lambdaLifting: fixpoint applied to a non-lambda"
 
           return (addApps (Top topCnt) (map Var freeIdxs))
@@ -304,6 +323,8 @@ lambdaLifting raw =
         _                      -> error "lambdaLifting: Fix applied to a non-lambda"
 
       Log name body -> Log name <$> go level ctx body
+      
+      Dbg n t x y -> Dbg n t <$> go level ctx x <*> go level ctx y
 
 --------------------------------------------------------------------------------
 

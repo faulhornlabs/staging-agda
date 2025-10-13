@@ -12,8 +12,10 @@ data RawPrim where
   MkRawPrim :: String       -> RawPrim
   RawProj   :: Int          -> RawPrim
   RawWrap   :: String       -> RawPrim
+{-
   RawInput  :: String -> Ty -> RawPrim
   RawOutput :: String       -> RawPrim
+-}
 
 deriving instance Eq   RawPrim
 deriving instance Show RawPrim
@@ -34,8 +36,10 @@ primOpTy rawprim args = case rawprim of
     [ty] -> Named name ty
     _    -> error "primOpTy: wrapping applied to more than 1 arguments"
 
+{-
   RawInput  _ ty  -> ty
   RawOutput _     -> Unit
+-}
 
 --------------------------------------------------------------------------------
 
