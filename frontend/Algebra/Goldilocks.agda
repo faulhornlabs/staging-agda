@@ -40,6 +40,9 @@ private
 isEqual : Tm F -> Tm F -> Tm Bit
 isEqual = with2′ eqU64
 
+isEqualℕ : ℕ -> Tm F -> Tm Bit
+isEqualℕ k = isEqual (fromℕ k)
+
 ----------------------------------------
 
 private 
@@ -159,7 +162,7 @@ goldilocksAPI = record
 --    mulGen : Tm F
     -- queries
   ; isEqual  = isEqual
---    isEqualℕ : ℕ    -> Tm F -> Tm Bit
+  ; isEqualℕ = isEqualℕ
     -- arithmetic
   ; neg   = neg
   ; add   = add

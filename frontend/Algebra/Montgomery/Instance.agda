@@ -36,7 +36,8 @@ record MontgomeryAPI (p : Prime) : Set where
     toBig         : Tm Mont -> Tm Big 
     importMont    : {l : ℕ} -> #limbs ≡ l -> Tm (BigInt l) -> Tm Mont
     exportMont    : {l : ℕ} -> #limbs ≡ l -> Tm Mont -> Tm (BigInt l)
-    isEqual : Tm Mont -> Tm Mont -> Tm Bit
+    isEqual  : Tm Mont -> Tm Mont -> Tm Bit
+    isEqualℕ : ℕ -> Tm Mont -> Tm Bit
     neg    : Tm Mont -> Tm Mont
     dbl    : Tm Mont -> Tm Mont
     add    : Tm Mont -> Tm Mont -> Tm Mont
@@ -63,7 +64,7 @@ montgomeryApiToFieldAPI {prime} mont = api where
 --    ; mulGen : Tm F
     -- queries
     ; isEqual  = MontgomeryAPI.isEqual mont
---    ; isEqualℕ : ℕ    -> Tm F -> Tm Bit
+    ; isEqualℕ = MontgomeryAPI.isEqualℕ mont
     -- arithmetic
     ; neg   = MontgomeryAPI.neg mont
     ; add   = MontgomeryAPI.add mont
@@ -139,7 +140,8 @@ withMontgomery {ty} prime kont = final where
           ; unsafeFromBig = App unsafeFromBigFun
           ; importMont    = \eq tm -> App unsafeFromBigFun (importBig eq tm)
           ; exportMont    = \eq tm -> exportBig eq (App toBigFun tm)
-          ; isEqual = App2 isEqualFun
+          ; isEqual  = App2 isEqualFun
+          ; isEqualℕ = MontP.isEqualℕ
           ; neg    = App  negFun
           ; dbl    = App  dblFun
           ; add    = App2 addFun

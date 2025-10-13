@@ -467,6 +467,9 @@ montValFromℕ k = WrapV (bigIntValFromℕ montk) where
 montFromℕ : ℕ -> Tm Mont
 montFromℕ k = Lit (montValFromℕ k)
 
+isEqualℕ : ℕ -> Tm Mont -> Tm Bit
+isEqualℕ k mont = isEqual (montFromℕ k) mont
+
 unsafeFromBigInt' : Tm (Big² ⇒ Big) -> Tm Big -> Tm Mont
 unsafeFromBigInt' redc input = mul' redc (wrap input) (wrap R2)
 

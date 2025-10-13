@@ -340,7 +340,11 @@ scaleExt scalar big = runGen do
 
 --------------------------------------------------------------------------------
 
-private 
+import Algebra.Misc
+open Algebra.Misc.Diagonal
+
+{-
+private
 
   listProd : {A B : Set} -> List A -> List B -> List (A × B)
   listProd {A} {B} []       ys = []
@@ -363,6 +367,7 @@ private
     ijs = listProd (Data.List.allFin n) (Data.List.allFin m)
     cond : Fin n × Fin m -> Bool
     cond (i , j) = finEq (finPlus i j) k
+-}
 
 mulExt : {n m : ℕ} -> Tm (BigInt n) -> Tm (BigInt m) -> Tm (BigInt (n + m))
 mulExt {n} {m} big1 big2 =
@@ -379,12 +384,14 @@ mulExt {n} {m} big1 big2 =
         (sumHi , sumLo) <- pair⇑ (sumU64 (Data.List._++_ prev loList))
         return (sumHi ∷ hiList , sumLo)
 
+{-
 private
 
   open import Data.Fin using ( _↑ˡ_ )
   
   smallDiagonal : (n : ℕ) -> Fin n -> List (Fin n × Fin n)
   smallDiagonal n k = diagonal n n (k ↑ˡ n) 
+-}
 
 mulTrunc : {n : ℕ} -> Tm (BigInt n) -> Tm (BigInt n) -> Tm (BigInt n)
 mulTrunc {n} big1 big2 =

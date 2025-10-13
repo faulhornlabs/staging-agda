@@ -7,14 +7,15 @@ module Meta.Gen where
 open import Agda.Builtin.Unit
 
 open import Data.Nat
+open import Data.Fin using ( Fin )
 open import Data.List
 open import Data.Vec
 open import Data.Maybe using ( Maybe ; nothing ; just )
 open import Data.String using ( String )
 
-open import Meta.Ty using ( Ty ; Pair )
+open import Meta.Ty using ( Ty ; Pair ; Vect )
 open import Meta.HOAS
-open import Meta.Lib using ( fst ; snd ; mkPair )
+open import Meta.Lib using ( fst ; snd ; mkPair ; vecproj )
 
 open import Data.Product using ( _×_ ; _,_ )
 
@@ -81,6 +82,32 @@ pair⇓ action = runGen do
 
 --  put : {ty : Ty} -> String -> Tm ty -> Tm IO -> Tm IO
 --  put {ty} name what kont = IOp (Put name what kont)
+
+--------------------------------------------------------------------------------
+-- these seem to require Gen (?), so i couldn't put them into Lib
+
+unVect : {ty : Ty} -> {n : ℕ} -> Tm (Vect n ty) -> Gen (Vec (Tm ty) n)
+unVect {ty = ty} {n = n} vec =
+  do
+    struct <- gen vec
+    return (worker struct)
+  where
+    worker : {n : ℕ} -> Tm (Vect n ty) -> Vec (Tm ty) n
+    worker {n} struct = go (Data.Vec.allFin n) where
+      go : {k : ℕ} -> Vec (Fin n) k -> Vec (Tm ty) k 
+      go []       = []
+      go (j ∷ js) = vecproj j struct ∷ go js
+
+vectMap : {ty1 ty2 : Ty} -> {n : ℕ} -> (Tm ty1 -> Tm ty2) -> Tm (Vect n ty1) -> Tm (Vect n ty2)
+vectMap f input = runGen do
+  pieces <- unVect input
+  return (Meta.Lib.mkVect (Data.Vec.map f pieces))
+
+vectZipWith : {ty1 ty2 ty3 : Ty} -> {n : ℕ} -> (Tm ty1 -> Tm ty2 -> Tm ty3) -> Tm (Vect n ty1) -> Tm (Vect n ty2) -> Tm (Vect n ty3)
+vectZipWith f input1 input2 = runGen do
+  pieces1 <- unVect input1
+  pieces2 <- unVect input2
+  return (Meta.Lib.mkVect (Data.Vec.zipWith f pieces1 pieces2))
 
 --------------------------------------------------------------------------------
 -- standard monadic functions specialized to Gen

@@ -20,7 +20,7 @@ record FieldAPI : Set where
 --    mulGen : Tm F
     -- queries
     isEqual  : Tm F -> Tm F -> Tm Bit
---    isEqualℕ : ℕ    -> Tm F -> Tm Bit
+    isEqualℕ : ℕ    -> Tm F -> Tm Bit
     -- arithmetic
     neg   : Tm F -> Tm F
     add   : Tm F -> Tm F -> Tm F

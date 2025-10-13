@@ -142,3 +142,15 @@ exRecAdd = App2 (Lam2 recAdd) (kstU64′ 7) (kstU64′ 5)
 exRecMul = App2 (Lam2 recMul) (kstU64′ 7) (kstU64′ 5)
 
 --------------------------------------------------------------------------------
+
+exClosure1 : Tm U64
+exClosure1 =
+  Let 
+    (Lam \x ->
+      Let (mulTruncU64 x x) \y -> Lam \z -> addU64 (mulTruncU64 x z) y)
+    \g -> Let (kstU64′ 5) \x0 ->
+      Let (App g x0) \h ->
+        App h (kstU64′ 7)
+            
+--------------------------------------------------------------------------------
+

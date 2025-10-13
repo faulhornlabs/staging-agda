@@ -111,6 +111,26 @@ module BitLib where
   castBitU64 : Tm Bit -> Tm U64
   castBitU64 x = Pri (CastBitU64 x)
 
+  andMany : {n : ℕ} -> Vec (Tm Bit) n -> Tm Bit
+  andMany []       = true
+  andMany (x ∷ xs) = ifte x (andMany xs) false
+
+  orMany : {n : ℕ} -> Vec (Tm Bit) n -> Tm Bit
+  orMany []       = false
+  orMany (x ∷ xs) = ifte x true (orMany xs)
+
+  allOf : {ty : Ty} -> {n : ℕ} -> (Tm ty -> Tm Bit) -> Vec (Tm ty) n -> Tm Bit 
+  allOf {ty = ty} {n = n} f = go where
+    go : {k : ℕ} -> Vec (Tm ty) k -> Tm Bit
+    go []       = true
+    go (x ∷ xs) = ifte (f x) (go xs) false
+
+  anyOf : {ty : Ty} -> {n : ℕ} -> (Tm ty -> Tm Bit) -> Vec (Tm ty) n -> Tm Bit 
+  anyOf {ty = ty} {n = n} f = go where
+    go : {k : ℕ} -> Vec (Tm ty) k -> Tm Bit
+    go []       = false
+    go (x ∷ xs) = ifte (f x) true (go xs) 
+
 --------------------------------------------------------------------------------
 
 module NatLib where
@@ -154,7 +174,7 @@ module StructLib where
 
   vecproj : {ty : Ty} -> (k : Fin n) -> Tm (Struct {n} (replicate n ty)) -> Tm ty
   vecproj {n} {ty} k what = subst Tm (lookup-replicate k ty) (proj k what)
-
+  
   mkPair : Tm s -> Tm t -> Tm (Pair s t)
   mkPair x y = Pri (MkPair x y)
 
