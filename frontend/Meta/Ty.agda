@@ -23,6 +23,19 @@ open import Meta.Show
 private variable
   n : ℕ
 
+-- value types
+data VTy : Set where
+  Unit′   : VTy
+  Token′  : VTy
+  Bit′    : VTy
+  U64′    : VTy
+  Nat′    : VTy
+  Struct′ : {n : ℕ} -> Vec VTy n -> VTy
+  Named′  : String -> VTy -> VTy
+
+--------------------------------------------------------------------------------
+
+-- all types
 data Ty : Set where
   -- LC
   Unit  : Ty
@@ -37,9 +50,16 @@ data Ty : Set where
   -- data structures
   Struct : {n : ℕ} -> Vec Ty n -> Ty
   Named  : String -> Ty -> Ty
-  -- Array  : ℕ -> Ty -> Ty
+  -- arrays
+  Ptr    : VTy -> Ty  
 
 infixr 30 _⇒_
+
+----------------------------------------
+
+-- indexing into arrays
+Idx : Ty
+Idx = U64
 
 Pair : Ty -> Ty -> Ty
 Pair s t = Struct (s ∷ t ∷ [])
@@ -51,15 +71,6 @@ U128 : Ty
 U128 = Pair U64 U64     -- currently the convention is (hi , lo) but maybe that should be changed???
 
 --------------------------------------------------------------------------------
-
-data VTy : Set where
-  Unit′   : VTy
-  Token′  : VTy
-  Bit′    : VTy
-  U64′    : VTy
-  Nat′    : VTy
-  Struct′ : {n : ℕ} -> Vec VTy n -> VTy
-  Named′  : String -> VTy -> VTy
 
 {-# TERMINATING #-}
 vtyToTy : VTy -> Ty
@@ -193,7 +204,7 @@ showTyPrec = go where
   go d (Named n t) = showParen (d >ᵇ appPrec) ("Named "  ++ quoteString n ++ " " ++ go appPrec₊₁ t) 
   go d (s ⇒ t)     = showParen (d >ᵇ appPrec) ("Arrow "  ++ go appPrec₊₁ s ++ " " ++ go appPrec₊₁ t)
   go d (Struct ts) = showParen (d >ᵇ appPrec) ("Struct " ++ showVec (\t -> go 0 t) ts)
-  -- go d (Array n t) = "<array>"
+  go d (Ptr t)     = showParen (d >ᵇ appPrec) ("Ptr " ++ go appPrec₊₁ (vtyToTy t))
 
 showTy : Ty -> String
 showTy = showTyPrec 0

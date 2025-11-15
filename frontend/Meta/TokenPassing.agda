@@ -61,6 +61,7 @@ convTy = go where
   go Nat          = Nat
   go (Struct tys) = Struct (Data.Vec.map go tys)
   go (Named n ty) = Named n (go ty)
+  go (Ptr vty)    = Ptr vty
 
 convCtx : Ctx n -> Ctx n
 convCtx = Data.Vec.map convTy
@@ -69,8 +70,8 @@ convCtx = Data.Vec.map convTy
 
 private
 
-  convTy-lemma₁ : {nam : String} -> convTy s ≡ t -> convTy (Named nam s) ≡ Named nam t
-  convTy-lemma₁ refl = refl
+  convTy-lemma-Named : {nam : String} -> convTy s ≡ t -> convTy (Named nam s) ≡ Named nam t
+  convTy-lemma-Named refl = refl
 
 convVTy : (ty′ : VTy) -> {ty : Ty} -> {eq : vtyToTy ty′ ≡ ty} -> convTy ty ≡ ty
 convVTy = go where
@@ -80,9 +81,14 @@ convVTy = go where
   go Bit′   {eq = refl}   = refl
   go U64′   {eq = refl}   = refl
   go Nat′   {eq = refl}   = refl
-  go (Named′ n t′) {ty = Named n t} {eq = refl} = let eq′ = go t′ {ty = t} {eq = refl} in convTy-lemma₁ eq′
+  go (Named′ n t′) {ty = Named n t} {eq = refl} = let eq′ = go t′ {ty = t} {eq = refl} in convTy-lemma-Named eq′
   go (Struct′ ts′) {ty = Struct ts} {eq = refl} = trustMe --  let eqs′ = Data.Vec.map go ts′ in ?
 
+private 
+
+  convTy-VTy-lemma : {vty : VTy} -> {ty : Ty} -> vtyToTy vty ≡ ty -> vtyToTy vty ≡ convTy ty
+  convTy-VTy-lemma {vty = vty} {ty = ty} eq = trans eq (sym (convVTy vty {eq = eq}))
+  
 --------------------------------------------------------------------------------
 
 private
@@ -95,6 +101,12 @@ private
 translateIO : {ctx : Ctx n} -> {ty : Ty} -> LC ctx ty -> LC (convCtx ctx) (convTy ty)
 translateIO = go where
 
+  WrapIO : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> PrimIO (LC ctx) ty -> LC ctx ty 
+  WrapIO pio = Pri (WrapPrimIO pio)
+
+  LamTok : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> LC (Token ∷ ctx) ty -> LC ctx (Token ⇒ ty)
+  LamTok body = Lam {s = Token} body
+  
   go     : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} ->         LC ctx ty  ->         LC (convCtx ctx)  (convTy ty)
   goIO   : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> InOut  (LC ctx) ty ->         LC (convCtx ctx)  (Token ⇒ Pair Token (convTy ty))
   goPrim : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> PrimOp (LC ctx) ty -> PrimOp (LC (convCtx ctx)) (convTy ty)
@@ -120,11 +132,7 @@ translateIO = go where
   -- this is only here so that Agda does not complain, so we just return a dummy value (yeah it's a hack)
   goPrim {ty = ty} prim = DummyPrimOp (convTy ty)
 
-  goIO         (Pure x    ) = Lam {s = Token} (mkPair lastVar (inExtendedCtx Token (go x)))
-
-  -- u : IO A          ~>     u' : Token -> A'
-  -- h : A -> IO B     ~>     h' : A' -> (Token -> B')
-  -- bind u h          ~>     bind' u' h' = \rw -> let x = u' rw in h' x rw
+  goIO (Pure x    ) = Lam {s = Token} (mkPair lastVar (inExtendedCtx Token (go x)))
 
   -- u : IO A          ~>     u' : Token -> (Token, A')
   -- h : A -> IO B     ~>     h' : A' -> (Token -> (Token, B'))
@@ -141,13 +149,36 @@ translateIO = go where
             (App  (inExtendedCtx    Token (go u))    rw )
             (App2 (inExtendedCtx2 P Token (go h)) x' rw₂)
 
-  goIO {n = n} {ctx = ctx} (Put name x) =
+  goIO  (Put name x) =
     let rw = lastVar 
         x' = inExtendedCtx Token (go x)
-    in  Lam {s = Token} (Pri (WrapPrimIO (PrimPut rw name x')))
+    in  LamTok (WrapIO (PrimPut rw name x'))
 
-  goIO {n = n} {ctx = ctx} (Get name t) =
+  goIO  (Get name t) =
      let rw = lastVar
-     in  Lam {s = Token} (Pri (WrapPrimIO (PrimGet rw name (convTy t))))
+     in  LamTok (WrapIO (PrimGet rw name (convTy t)))
+
+  goIO (Alloc size) =
+     let rw = lastVar
+         size' = inExtendedCtx Token (go size)
+     in  LamTok (WrapIO (PrimAlloc rw size'))
+
+  goIO (Free ptr) =
+     let rw = lastVar
+         ptr' = inExtendedCtx Token (go ptr)
+     in  LamTok (WrapIO (PrimFree rw ptr'))
+
+  goIO (Read {eq = eq} ptr j) = 
+     let rw = lastVar
+         ptr' = inExtendedCtx Token (go ptr)
+         j'   = inExtendedCtx Token (go j  )
+     in  LamTok (WrapIO (PrimRead {eq = convTy-VTy-lemma eq} rw ptr' j'))
+
+  goIO (Write {eq = eq} ptr j y) = 
+     let rw = lastVar
+         ptr' = inExtendedCtx Token (go ptr)
+         j'   = inExtendedCtx Token (go j  )
+         y'   = inExtendedCtx Token (go y  )
+     in  LamTok (WrapIO (PrimWrite {eq = convTy-VTy-lemma eq} rw ptr' j' y'))
 
 --------------------------------------------------------------------------------
