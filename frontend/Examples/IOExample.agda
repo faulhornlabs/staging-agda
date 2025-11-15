@@ -5,12 +5,13 @@ module Examples.IOExample where
 
 open import Data.Empty
 open import Data.Nat
+open import Data.String
 
-open import Function using ( _$_ )
+-- open import Function using ( _$_ )
+-- open import Relation.Binary.PropositionalEquality
 
-open import Relation.Binary.PropositionalEquality
+open import Meta.Object hiding ( Gen ; return ; _>>_ ; _>>=_ )
 
-open import Meta.Object
 open import Algebra.FieldLib
 open import Algebra.Limbs
 open import Algebra.Prime
@@ -35,6 +36,8 @@ thePrime = mkPrime thePrime-ℕ
 
 module Foo where
 
+  open import Meta.Gen
+  
   import Algebra.Montgomery.Impl as Montgomery
   open module MontP = Montgomery thePrime
 
@@ -61,17 +64,57 @@ module Foo where
     out  <- gen (MontP.toBigInt tmp₃)
     Meta.Object.return out
 
-  test1 : Tm IO
-  test1 = 
-    get "x" \x -> 
-    get "y" \y -> 
-    get "z" \z -> 
-    put "out1" (compute1 x y z) $
-    put "out2" (compute2 x y z) $
-    halt
+module MyMain where
 
-exIO1 : Tm IO
-exIO1 = Foo.test1
+  open Foo
+
+  variable
+    ty  : Ty
+    s t : Ty
+    
+  data MIO : Ty -> Set where
+    MkMIO : Tm (IO ty) -> MIO ty
+
+  runMIO : MIO ty -> Tm (IO ty)
+  runMIO (MkMIO tm) = tm
+  
+  private
+    _>>=_ : MIO s -> (Tm s -> MIO t) -> MIO t    
+    _>>=_ (MkMIO u) h = MkMIO (bind u (Lam \x -> runMIO (h x)))
+
+    _>>_ : MIO s -> MIO t -> MIO t
+    _>>_ (MkMIO u) (MkMIO v) = MkMIO (then u v)
+
+    mreturn : Tm ty -> MIO ty
+    mreturn x = MkMIO (return x)
+
+  mget : {ty : Ty} -> String -> MIO ty
+  mget name = MkMIO (get name)
+
+  mput : String -> Tm ty -> MIO Unit
+  mput name what = MkMIO (put name what)
+
+  open U64Lib
+
+  test0 : Tm (IO Unit)
+  test0 = runMIO do
+    x <- mget "x"
+    mput "out" (addU64 x (kstU64′ 101))
+
+  test1 : Tm (IO Unit)
+  test1 = runMIO do
+    x <- mget "x"
+    y <- mget "y"
+    z <- mget "z"
+    mput "out1" (compute1 x y z) 
+    mput "out2" (compute2 x y z)
+    mreturn tt
+
+exIO0 : Tm (IO Unit)
+exIO0 = MyMain.test0
+
+exIO1 : Tm (IO Unit)
+exIO1 = MyMain.test1
 
 --------------------------------------------------------------------------------
 

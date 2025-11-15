@@ -24,7 +24,7 @@ open import Relation.Binary.PropositionalEquality
 
 open import Meta.Object
 
-open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' )
+open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; BigIntVTy ; BigIntVTy' )
 open import Algebra.Limbs
 open import Algebra.Misc
 
@@ -47,19 +47,19 @@ open U64Lib
 
 private
 
-  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Val (BigInt nlimbs))
-  Σlimbs = natToBigInt prime
+  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Val′ (BigIntVTy nlimbs))
+  Σlimbs = natToBigIntVTy prime
 
 #limbs : ℕ
 #limbs = proj₁ Σlimbs
 
 private
 
-  primeBigIntVal : Val (BigInt #limbs)
-  primeBigIntVal = proj₂ Σlimbs
+  primeBigIntVal′ : Val′ (BigIntVTy #limbs)
+  primeBigIntVal′ = proj₂ Σlimbs
 
   primeBigInt : Tm (BigInt #limbs)
-  primeBigInt = Lit primeBigIntVal
+  primeBigInt = BigInt.mkBigIntLit primeBigIntVal′
 
 tyName : String
 tyName = Data.String._++_ "Mod" (Data.Nat.Show.show prime)

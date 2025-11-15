@@ -15,6 +15,7 @@ open import Data.Product
 open import Data.Maybe    using ( Maybe ; just ; nothing )
 
 open import Relation.Binary.PropositionalEquality
+open import Relation.Binary.PropositionalEquality.TrustMe using ( trustMe )
 -- open import Data.Vec.Properties using ( lookup-replicate )
 
 open import Data.Nat.Properties using ( m≤m+n ; m≤n+m )
@@ -39,6 +40,13 @@ BigInt' nlimbs = Struct (Data.Vec.replicate nlimbs U64)
 
 BigInt : ℕ -> Ty
 BigInt nlimbs = Named name (BigInt' nlimbs) where
+  name = Data.String._++_ "BigInt" (Data.Nat.Show.show nlimbs)
+
+BigIntVTy' : ℕ -> VTy
+BigIntVTy' nlimbs = Struct′ (Data.Vec.replicate nlimbs U64′)
+
+BigIntVTy : ℕ -> VTy
+BigIntVTy nlimbs = Named′ name (BigIntVTy' nlimbs) where
   name = Data.String._++_ "BigInt" (Data.Nat.Show.show nlimbs)
 
 mkBigInt' : {nlimbs : ℕ} -> Vec (Tm U64) nlimbs -> Tm (BigInt' nlimbs)
@@ -71,6 +79,22 @@ private
 
   TmBigInt : ℕ -> Set
   TmBigInt n = Tm (BigInt n)
+
+--------------------------------------------------------------------------------
+
+private
+
+  lemma-BigInt' : {n : ℕ} -> vtyToTy (BigIntVTy' n) ≡ BigInt' n
+  lemma-BigInt' = trustMe
+
+  lemma-BigInt : {n : ℕ} -> vtyToTy (BigIntVTy n) ≡ BigInt n
+  lemma-BigInt = trustMe
+
+mkBigIntLit' : {#limbs : ℕ} -> Val′ (BigIntVTy' #limbs) -> Tm (BigInt' #limbs)
+mkBigIntLit' {#limbs} val′ = Lit {eq = lemma-BigInt' {n = #limbs}} val′
+
+mkBigIntLit : {#limbs : ℕ} -> Val′ (BigIntVTy #limbs) -> Tm (BigInt #limbs)
+mkBigIntLit {#limbs} val′ = Lit {eq = lemma-BigInt {n = #limbs}} val′
 
 --------------------------------------------------------------------------------
 

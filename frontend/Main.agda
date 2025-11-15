@@ -26,7 +26,7 @@ open import Examples.IOExample
 --------------------------------------------------------------------------------
 
 exStr1 : String
-exStr1 = Export.exportToString exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
+exStr1 = Export.exportToString exIO0 -- exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
 
 -- letFunTest -- liftTest1 -- myApplication -- small2 -- exMont2 -- mixedLam1 -- lamEx2a -- exMod1 -- natEx2 
 

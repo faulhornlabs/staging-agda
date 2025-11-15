@@ -19,8 +19,6 @@ open import Algebra.Prime
 
 open import Algebra.BigInt using ( BigInt )
 
-open IOLib
-
 module Big where
 
   open import Algebra.BigInt 

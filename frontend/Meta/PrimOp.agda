@@ -21,6 +21,20 @@ open import Meta.Ty
 open import Meta.Val
 open import Meta.HList using ( HList ; Cons ; Nil ; traverse₂ ; hlistForget )
 open import Meta.Show
+open import Meta.IO
+
+--------------------------------------------------------------------------------
+
+private
+
+  variable
+    A B : Set
+    
+  fst : A × B -> A
+  fst (x , _) = x
+
+  snd : A × B -> B
+  snd (_ , y) = y
 
 --------------------------------------------------------------------------------
 
@@ -30,6 +44,8 @@ private variable
   ts  : Vec Ty n
   
 data PrimOp (tm : Ty -> Set) : Ty -> Set where
+  -- hackety hack hack
+  DummyPrimOp   : (t : Ty) -> PrimOp tm t  
   -- 64-bit arithmetic
   AddU64        : tm U64 -> tm U64 -> PrimOp tm U64
   SubU64        : tm U64 -> tm U64 -> PrimOp tm U64
@@ -70,8 +86,10 @@ data PrimOp (tm : Ty -> Set) : Ty -> Set where
   NatAdd        : tm Nat -> tm Nat -> PrimOp tm Nat
   NatSubTrunc   : tm Nat -> tm Nat -> PrimOp tm Nat
   NatMul        : tm Nat -> tm Nat -> PrimOp tm Nat
+  -- input / output
+  WrapPrimIO    : PrimIO tm t -> PrimOp tm t
+  
 {-
-  -- input / output (the old-style IO hack; it's replaced now by a continuation based IO type)
   Input         : String -> (ty : Ty) -> PrimOp tm ty
   Output        : String -> {ty : Ty} -> tm ty -> PrimOp tm Unit
 -}
@@ -103,6 +121,7 @@ GeU64 x y = LeU64 y x
 mapPrim : {tm₁ tm₂ : Ty -> Set} -> ({s : Ty} -> tm₁ s -> tm₂ s) -> {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ t
 mapPrim {tm₁} {tm₂} f what = go what where
   go : {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ t
+  go (DummyPrimOp ty)    = DummyPrimOp ty
   go (AddU64 x y)        = AddU64 (f x) (f y)
   go (SubU64 x y)        = SubU64 (f x) (f y)
   go (AddCarryU64 c x y) = AddCarryU64 (f c) (f x) (f y)
@@ -139,6 +158,7 @@ mapPrim {tm₁} {tm₂} f what = go what where
   go (Input  n t)        = Input n t
   go (Output n y)        = Output n (f y)
 -}
+  go (WrapPrimIO pio)    = WrapPrimIO (mapPrimIO f pio)
 
 --------------------------------------------------------------------------------
 
@@ -149,6 +169,7 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   _<*>_ = RawApplicative._<*>_ applicative
 
   go : {t : Ty} -> PrimOp tm₁ t -> F (PrimOp tm₂ t)
+  go (DummyPrimOp ty)    = pure (DummyPrimOp ty)
   go (AddU64 x y)        = (| AddU64 (f x) (f y)             |)
   go (SubU64 x y)        = (| SubU64 (f x) (f y)             |)
   go (MulTruncU64 x y)   = (| MulTruncU64 (f x) (f y)        |)
@@ -185,6 +206,7 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   go (Input  n t)        = pure (Input n t)                    
   go (Output n y)        = (| (Output n) (f y)               |)
 -}
+  go (WrapPrimIO pio)    = (| WrapPrimIO (traversePrimIO applicative f pio) |)
 
 mapMaybePrim
   :  {tm₁ tm₂ : Ty -> Set}
@@ -195,11 +217,12 @@ mapMaybePrim = traversePrim Data.Maybe.Effectful.applicative
 --------------------------------------------------------------------------------
 
 data RawPrim : Set where
-  MkRawPrim : String -> RawPrim
-  RawProj   : ℕ -> RawPrim
-  RawWrap   : String -> RawPrim
+  MkRawPrim   : String     -> RawPrim
+  MkRawPrimIO : RawPrimIO  -> RawPrim
+  RawProj     : ℕ          -> RawPrim
+  RawWrap     : String     -> RawPrim
 {-
-  -- the old-style IO hack; it's replaced now by a continuation based IO type
+  -- the old-style IO hack; it's replaced now 
   RawInput  : String -> Ty -> RawPrim
   RawOutput : String -> RawPrim
 -}
@@ -207,9 +230,10 @@ data RawPrim : Set where
 showRawPrimPrec : ℕ -> RawPrim -> String
 showRawPrimPrec = go where
   go : ℕ -> RawPrim -> String
-  go d (MkRawPrim name) = showParen (d >ᵇ appPrec) ("MkRawPrim " ++ showString name)
-  go d (RawProj   j)    = showParen (d >ᵇ appPrec) ("RawProj "   ++ showNat j)
-  go d (RawWrap   n)    = showParen (d >ᵇ appPrec) ("RawWrap "   ++ showString n)
+  go d (MkRawPrim   name) = showParen (d >ᵇ appPrec) ("MkRawPrim "   ++ showString name)
+  go d (MkRawPrimIO pio)  = showParen (d >ᵇ appPrec) ("MkRawPrimIO " ++ showRawPrimIOPrec appPrec₊₁ pio)
+  go d (RawProj     j)    = showParen (d >ᵇ appPrec) ("RawProj "     ++ showNat j)
+  go d (RawWrap     n)    = showParen (d >ᵇ appPrec) ("RawWrap "     ++ showString n)
 {-
   go d (RawInput  n t)  = showParen (d >ᵇ appPrec) ("RawInput "  ++ showString n ++ " " ++ showTyPrec appPrec₊₁ t)
   go d (RawOutput n  )  = showParen (d >ᵇ appPrec) ("RawOutput " ++ showString n)
@@ -218,6 +242,7 @@ showRawPrimPrec = go where
 primOpForget : {tm : Ty -> Set} -> {A : Set} -> {t : Ty} -> ({t : Ty} -> tm t -> A) -> PrimOp tm t -> RawPrim × List A
 primOpForget {tm} {A} f = go where
   go : {ty : Ty} -> PrimOp tm ty -> RawPrim × List A
+  go (DummyPrimOp ty)    = MkRawPrim "DummyPrimOp"   , [] 
   go (AddU64 x y)        = MkRawPrim "AddU64"        , (f x ∷ f y ∷ [])
   go (SubU64 x y)        = MkRawPrim "SubU64"        , (f x ∷ f y ∷ [])
   go (AddCarryU64 c x y) = MkRawPrim "AddCarryU64"   , (f c ∷ f x ∷ f y ∷ [])
@@ -254,5 +279,6 @@ primOpForget {tm} {A} f = go where
   go (Input  n t)        = RawInput  n t             , []
   go (Output n y)        = RawOutput n               , (f y ∷ [])
 -}
-
+  go (WrapPrimIO pio)    = let pair = primIOForget f pio in MkRawPrimIO (fst pair) , snd pair
+  
 --------------------------------------------------------------------------------

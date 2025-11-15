@@ -16,7 +16,6 @@ open import Data.Product using ( _×_ ; _,_ )
 open import Relation.Binary.PropositionalEquality
 open import Data.Vec.Properties using ( lookup-replicate )
 
-open import Meta.Ctx
 open import Meta.Val
 open import Meta.HList
 open import Meta.PrimOp
@@ -35,7 +34,7 @@ private variable
 --------------------------------------------------------------------------------
 
 tt : Tm Unit
-tt = Lit Tt
+tt = Lit {eq = refl} TtV′
 
 --------------------------------------------------------------------------------
 
@@ -44,32 +43,28 @@ debug′ = Dbg
 
 --------------------------------------------------------------------------------
 
-{-
 module IOLib where
 
-  input′ : String -> (ty : Ty) -> Tm ty
-  input′ n t = Pri (Input n t)
+  pure : Tm t -> Tm (IO t)
+  pure what = IOp (Pure what)
 
-  input : {ty : Ty} -> String -> Tm ty
-  input {t} n = Pri (Input n t)
--}
+  return : Tm t -> Tm (IO t)
+  return = pure
+  
+  bind : Tm (IO s) -> Tm (s ⇒ IO t) -> Tm (IO t)
+  bind action next = IOp (Bind action next)
 
-module IOLib where
+  then : Tm (IO s) -> Tm (IO t) -> Tm (IO t)
+  then this next = bind this (Lam \_ -> next)
+  
+  get′ : String -> (ty : Ty) -> Tm (IO ty) 
+  get′ name ty = IOp (Get name ty)
 
-  halt : Tm IO
-  halt = IOp Halt
+  get : {ty : Ty} -> String -> Tm (IO ty)
+  get {ty} name = get′ name ty
 
-  get′ : String -> (ty : Ty) -> (Tm ty -> Tm IO) -> Tm IO  
-  get′ name ty kont = IOp (Get name kont)
-
-  get : {ty : Ty} -> String -> (Tm ty -> Tm IO) -> Tm IO
-  get {ty} name kont = get′ name ty kont
-
-  put : {ty : Ty} -> String -> Tm ty -> Tm IO -> Tm IO
-  put {ty} name what kont = IOp (Put name what kont)
-
-  putAndHalt : {ty : Ty} -> String -> Tm ty -> Tm IO
-  putAndHalt name what = put name what halt
+  put : {ty : Ty} -> String -> Tm ty -> Tm (IO Unit)
+  put {ty} name what = IOp (Put name what)
   
 --------------------------------------------------------------------------------
 
@@ -85,7 +80,7 @@ _||_ b c = Pri (Or  b c)
 module BitLib where
  
   kstBit : Bool -> Tm Bit
-  kstBit b = Lit (Val.BitV b)
+  kstBit b = Lit {eq = refl} (BitV′ b)
 
   zeroBit : Tm Bit
   zeroBit = kstBit Data.Bool.false
@@ -136,7 +131,7 @@ module BitLib where
 module NatLib where
 
   kstNat : ℕ -> Tm Nat
-  kstNat n = Lit (Val.NatV n)
+  kstNat n = Lit {eq = refl} (NatV′ n)
 
   zeroNat : Tm Nat
   zeroNat = Pri Zero
@@ -197,7 +192,7 @@ open StructLib public
 module U64Lib where
 
   kstU64 : Word64 -> Tm U64
-  kstU64 x = Lit (Val.U64V x)
+  kstU64 x = Lit {eq = refl} (U64V′ x)
 
   kstU64′ : ℕ -> Tm U64
   kstU64′ k = kstU64 (Data.Word64.fromℕ k)

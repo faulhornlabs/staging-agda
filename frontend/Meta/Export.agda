@@ -20,6 +20,7 @@ open import Meta.PrimOp
 open import Meta.IO
 open import Meta.HList
 open import Meta.Show
+open import Meta.TokenPassing using ( convTy ; convCtx ; translateIO )
 
 import Meta.Val     as TVal
 import Meta.STLC    as STLC
@@ -48,12 +49,14 @@ data LC : Ctx n -> (ty : Ty) -> Set where
 --------------------------------------------------------------------------------
 
 data RVal : Set where
-  Tt      :                   RVal
+  TtV     :                   RVal
   BitV    : Bool           -> RVal
   U64V    : Word64         -> RVal
   NatV    : ℕ              -> RVal
   StructV : List RVal      -> RVal
   WrapV   : String -> RVal -> RVal
+
+----------------------------------------
 
 valForget : TVal.Val t -> RVal
 valForget = go where
@@ -62,7 +65,7 @@ valForget = go where
   go : {ty : Ty} -> TVal.Val ty -> RVal
   goList : {ts : Vec Ty n} -> HList TVal.Val ts -> List RVal
 
-  go TVal.Tt           = Tt
+  go TVal.TtV          = TtV
   go (TVal.BitV b)     = BitV b
   go (TVal.U64V u)     = U64V u
   go (TVal.NatV n)     = NatV n
@@ -74,12 +77,29 @@ valForget = go where
   goList Nil = []
   goList (Cons x xs) = go x ∷ goList xs
 
+valForget′ : {t : VTy} -> TVal.Val′ t -> RVal
+valForget′ = go where
+
+  go : {ty : VTy} -> TVal.Val′ ty -> RVal
+  goList : {ts : Vec VTy n} -> HList TVal.Val′ ts -> List RVal
+
+  go TVal.TtV′          = TtV
+  go (TVal.BitV′ b)     = BitV b
+  go (TVal.U64V′ u)     = U64V u
+  go (TVal.NatV′ n)     = NatV n
+  go (TVal.StructV′ xs) = StructV (goList xs)
+  go (TVal.WrapV′ {t} {nam} v)  = WrapV nam (go v)
+  goList Nil = []
+  goList (Cons x xs) = go x ∷ goList xs
+
+----------------------------------------
+
 {-# TERMINATING #-}
 showRValPrec : ℕ -> RVal -> String
 showRValPrec = go where
 
   go : ℕ -> RVal -> String
-  go d Tt          = "Tt"
+  go d  TtV         = "TtV"
   go d (BitV b)     = showParen (d >ᵇ appPrec) ("BitV " ++ showBoolHs b)
   go d (U64V w    ) = showParen (d >ᵇ appPrec) ("U64V " ++ showWord64 w)
   go d (NatV n    ) = showParen (d >ᵇ appPrec) ("NatV " ++ showNat    n)
@@ -103,12 +123,14 @@ showRVal = showRValPrec 0
 --------------------------------------------------------------------------------
 
 data Raw : Set where
+  Dum : Raw                  -- dummy
+  App : Raw -> Raw -> Raw
   Lam : Ty -> Raw -> Raw
   Let : Ty -> Raw -> Raw -> Raw
-  App : Raw -> Raw -> Raw
-  Fix : Raw -> Raw
+  Rec : Ty -> Raw -> Raw -> Raw
+--  Fix : Raw -> Raw
   Pri : RawPrim -> List Raw -> Raw
-  IOp : RawIO Raw -> Raw
+--  IOp : RawIO Raw -> Raw
   Lit : RVal -> Raw
   Var : (j : ℕ) -> Raw
   Log : String -> Raw -> Raw
@@ -121,12 +143,13 @@ convertToRaw = go where
   go : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> STLC.LC ctx ty -> Raw
   go (STLC.Lam {s = s} body    )   = Lam s (go body)
   go (STLC.Let {s = s} rhs body)   = Let s (go rhs) (go body)
+  go (STLC.Rec {u = u} rhs body)   = Rec u (go rhs) (go body)
   go (STLC.App         fun arg )   = App (go fun) (go arg)
   go (STLC.Var         j   _   )   = Var (Data.Fin.toℕ j)
-  go (STLC.Lit         val     )   = Lit (valForget val)
+  go (STLC.Lit         val     )   = Lit (valForget′ val)
   go (STLC.Pri         pri     )   = let raw , list = primOpForget go pri in Pri raw list
-  go (STLC.IOp         rawio   )   = IOp (ioForget go rawio)
-  go (STLC.Fix         rec     )   = Fix (go rec)
+  go (STLC.IOp         rawio   )   = Dum -- IOp (ioForget go rawio)
+  -- go (STLC.Fix         rec     )   = Fix (go rec)
   go (STLC.Log         nam body)   = Log nam (go body)
   go (STLC.Dbg {s = s} nam x y )   = Dbg nam s (go x) (go y)
   
@@ -137,14 +160,16 @@ showRawPrec : ℕ -> Raw -> String
 showRawPrec = go where
 
   go : ℕ -> Raw -> String
+  go d (Dum            ) = "Dummy"
   go d (Lam ty body    ) = showParen (d >ᵇ appPrec) ("Lam " ++ showTyPrec appPrec₊₁ ty ++ " " ++ go appPrec₊₁ body)
   go d (Let ty rhs body) = showParen (d >ᵇ appPrec) ("Let " ++ showTyPrec appPrec₊₁ ty ++ " " ++ go appPrec₊₁ rhs ++ " " ++ go appPrec₊₁ body)
+  go d (Rec ty rhs body) = showParen (d >ᵇ appPrec) ("Rec " ++ showTyPrec appPrec₊₁ ty ++ " " ++ go appPrec₊₁ rhs ++ " " ++ go appPrec₊₁ body)
   go d (App fun arg)     = showParen (d >ᵇ appPrec) ("App " ++ go appPrec₊₁ fun ++ " " ++ go appPrec₊₁ arg)
   go d (Lit val)         = showParen (d >ᵇ appPrec) ("Lit " ++ showRValPrec appPrec₊₁ val)
   go d (Var j)           = showParen (d >ᵇ appPrec) ("Var " ++ showNat j)
   go d (Pri raw args)    = showParen (d >ᵇ appPrec) ("Pri " ++ showRawPrimPrec appPrec₊₁ raw ++ " " ++ showList (go 0) args)
-  go d (IOp rawio)       = showParen (d >ᵇ appPrec) ("IOp " ++ showRawIOPrec go appPrec₊₁ rawio)
-  go d (Fix rec)         = showParen (d >ᵇ appPrec) ("Fix " ++ go appPrec₊₁ rec)
+  -- go d (IOp rawio)       = showParen (d >ᵇ appPrec) ("IOp " ++ showRawIOPrec go appPrec₊₁ rawio)
+  -- go d (Fix rec)         = showParen (d >ᵇ appPrec) ("Fix " ++ go appPrec₊₁ rec)
   go d (Log name body)   = showParen (d >ᵇ appPrec) ("Log " ++ showString name ++ " " ++ go appPrec₊₁ body)
   go d (Dbg name ty x y) = showParen (d >ᵇ appPrec) ("Dbg " ++ showString name ++ " " ++ showTyPrec appPrec₊₁ ty ++ " " ++ go appPrec₊₁ x ++ " " ++ go appPrec₊₁ y)
  
@@ -156,7 +181,8 @@ showRaw = showRawPrec 0
 exportToStringMaybe : {ty : Ty} -> HOAS.Tm ty -> Maybe String
 exportToStringMaybe tm = do
   lc <- Conv.convert tm
-  let raw = convertToRaw lc
+  let lc' = translateIO lc
+  let raw = convertToRaw lc'
   just (showRaw raw)
 
 {-# NON_COVERING #-}

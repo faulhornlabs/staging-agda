@@ -1,5 +1,5 @@
 
--- Conversion from HOAS terms to standard STLC terms
+-- Conversion from second order HOAS terms to standard first order STLC terms
 
 {-# OPTIONS --type-in-type #-}
 {-# OPTIONS --show-implicit #-}
@@ -24,6 +24,7 @@ open import Data.Product using ( _×_ ; _,′_ )
 
 open import Meta.Ty
 open import Meta.Ctx
+open import Meta.CtxLemmas using ( fixToLetRec )
 open import Meta.Val
 open import Meta.PrimOp
 open import Meta.IO
@@ -48,23 +49,39 @@ private variable
 convert' : Tm ty -> Maybe (LC ctx ty)
 convert' = go where
 
-  go   : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> Tm ty -> Maybe (LC ctx ty)
-  goIO : {n : ℕ} -> {ctx : Ctx n} -> InOut Tm -> Maybe (InOut′ LC ctx)
+  go   : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> Tm ty       -> Maybe (LC ctx ty)
+  goIO : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> InOut Tm ty -> Maybe (InOut (LC ctx) ty)    -- InOut′ LC ctx ty)
 
   --------------------
+
+  goIO {ctx = ctx} what = mapMaybeInOut go what 
   
-  goIO {n} {ctx} Halt = just Halt′
-
-  goIO {n} {ctx} (Put {ty} name what kont) = do
+{-  
+  goIO {n} {ctx} (Pure what) = do
     what' <- go what
-    kont' <- go kont
-    just (Put′ name what' kont')
+    just (Pure′ what')
 
-  goIO {n} {ctx} (Get {ty} name kont) = do
-    body <- go (kont (HOAS.Var ty n))
-    just (Get′ {LC} {ty} {n} {ctx} name body)
+  goIO {n} {ctx} (Bind {s = s} action next) = do
+    action' <- go action
+    next'   <- go (HOAS.App next (HOAS.Var s n))
+    just (Bind′ action' next')
+
+  goIO {n} {ctx} (Get name ty) = do
+    just (Get′ name ty)
+
+  goIO {n} {ctx} (Put {ty} name what) = do
+    what' <- go what
+    just (Put′ name what')
+-}
 
   --------------------
+
+  -- eliminate `App Lam`
+  go (HOAS.App (HOAS.Lam f) x) = go (f x)     
+  
+  go (HOAS.IOp io) = do
+   io' <- goIO io
+   just (STLC.IOp io')
   
   go {n} {ctx} (HOAS.Var s k) = do
     MkInCtx j t refl <- lkpCtxNatWithProof ctx k
@@ -86,19 +103,16 @@ convert' = go where
     x' <- go x
     just (STLC.App f' x')
 
-  go (HOAS.Lit v) = just (STLC.Lit v)
+  go (HOAS.Lit {eq = refl} v) = just (STLC.Lit {eq = refl} v)
 
   go (HOAS.Pri prim) = do
     prim' <- mapMaybePrim go prim
     just (STLC.Pri prim')
-
-  go (HOAS.IOp io) = do
-   io' <- goIO io
-   just (STLC.IOp io')
      
   go (HOAS.Fix f) = do
     f' <- go f
-    just (STLC.Fix f')
+    just (fixToLetRec f')
+    -- just (STLC.Fix f')
 
   go (HOAS.Log n x) = do
     x' <- go x
@@ -119,7 +133,7 @@ convert = convert'
 
 private
 
-  tm-sub₂ : {s t : Ty} -> (s ≡ t) -> Tm' ctx s -> Tm' ctx t
+  tm-sub₂ : {s t : Ty} -> (s ≡ t) -> LC ctx s -> LC ctx t
   tm-sub₂ refl tm = tm
 
   lemma₁ : (n : ℕ) -> opposite (Data.Fin.fromℕ n) ≡ fzero
@@ -129,7 +143,7 @@ private
   lemma₂ : {n : ℕ} -> (u : Ty) -> (ctx : Ctx n) -> lkpCtx (u ∷ ctx) (Data.Fin.fromℕ n) ≡ u
   lemma₂ {n} u ctx = lookup-sub₂ (u ∷ ctx) (lemma₁ n)
 
-  mkVar₊₁ : (u : Ty) -> (ctx : Ctx n) -> Tm' (u ∷ ctx) u
+  mkVar₊₁ : (u : Ty) -> (ctx : Ctx n) -> LC (u ∷ ctx) u
   mkVar₊₁ u ctx = tm-sub₂ (lemma₂ u ctx) (Var (opposite fzero))
 
 -}

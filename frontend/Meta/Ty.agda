@@ -24,12 +24,17 @@ private variable
   n : ℕ
 
 data Ty : Set where
-  Unit   : Ty
-  _⇒_    : Ty -> Ty -> Ty
-  IO     : Ty
+  -- LC
+  Unit  : Ty
+  _⇒_   : Ty -> Ty -> Ty
+  -- IO
+  IO    : Ty -> Ty
+  Token : Ty             -- type of the `RealWorld` token
+  -- built-in
   Bit    : Ty
   U64    : Ty
-  Nat    : Ty
+  Nat    : Ty            -- we should probably remove this
+  -- data structures
   Struct : {n : ℕ} -> Vec Ty n -> Ty
   Named  : String -> Ty -> Ty
   -- Array  : ℕ -> Ty -> Ty
@@ -44,6 +49,51 @@ Vect n t = Struct (Data.Vec.replicate n t)
 
 U128 : Ty
 U128 = Pair U64 U64     -- currently the convention is (hi , lo) but maybe that should be changed???
+
+--------------------------------------------------------------------------------
+
+data VTy : Set where
+  Unit′   : VTy
+  Token′  : VTy
+  Bit′    : VTy
+  U64′    : VTy
+  Nat′    : VTy
+  Struct′ : {n : ℕ} -> Vec VTy n -> VTy
+  Named′  : String -> VTy -> VTy
+
+{-# TERMINATING #-}
+vtyToTy : VTy -> Ty
+vtyToTy = go where
+  go : VTy -> Ty
+  go Unit′   = Unit
+  go Token′  = Token
+  go Bit′    = Bit
+  go U64′    = U64
+  go Nat′    = Nat
+  go (Struct′ ts ) = Struct (Data.Vec.map go ts)
+  go (Named′  n t) = Named n (go t)
+
+{-# TERMINATING #-}
+unsafeTyToVTy : Ty -> VTy
+unsafeTyToVTy = go where
+  {-# NON_COVERING #-}
+  go : Ty -> VTy
+  go Unit   = Unit′
+  go Token  = Token′
+  go Bit    = Bit′
+  go U64    = U64′
+  go Nat    = Nat′
+  go (Struct ts ) = Struct′ (Data.Vec.map go ts)
+  go (Named  n t) = Named′ n (go t)
+
+Pair′ : VTy -> VTy -> VTy
+Pair′ s t = Struct′ (s ∷ t ∷ [])
+
+Vect′ : ℕ -> VTy -> VTy
+Vect′ n t = Struct′ (Data.Vec.replicate n t)
+
+U128′ : VTy
+U128′ = Pair′ U64′ U64′     -- currently the convention is (hi , lo) but maybe that should be changed???
 
 --------------------------------------------------------------------------------
 
@@ -81,11 +131,16 @@ tyVecEq  : (u v : Vec Ty n) -> SemiDec (u ≡ v)
 tyEq = go where
 
   go : (s t : Ty) -> SemiDec (s ≡ t)
-  go Unit Unit = STrue refl
-  go IO   IO   = STrue refl
-  go Bit  Bit  = STrue refl
-  go U64  U64  = STrue refl
-  go Nat  Nat  = STrue refl
+  go Unit  Unit = STrue refl
+  go Bit   Bit  = STrue refl
+  go U64   U64  = STrue refl
+  go Nat   Nat  = STrue refl
+
+  go Token Token = STrue refl
+
+  go (IO s₁) (IO t₁) with go s₁ t₁ 
+  go (IO s₁) (IO t₁) | SFalse     = SFalse
+  go (IO s₁) (IO t₁) | STrue refl = STrue refl
 
 {-
   go (Array n s) (Array m t) with natEq n m
@@ -130,10 +185,11 @@ showTyPrec = go where
 
   go : ℕ -> Ty -> String
   go d Unit        = "Unit"
-  go d IO          = "IO"
   go d Bit         = "Bit"
   go d U64         = "U64"
   go d Nat         = "Nat"
+  go d Token       = "Token"
+  go d (IO t)      = showParen (d >ᵇ appPrec) ("IO_ " ++ go appPrec₊₁ t)
   go d (Named n t) = showParen (d >ᵇ appPrec) ("Named "  ++ quoteString n ++ " " ++ go appPrec₊₁ t) 
   go d (s ⇒ t)     = showParen (d >ᵇ appPrec) ("Arrow "  ++ go appPrec₊₁ s ++ " " ++ go appPrec₊₁ t)
   go d (Struct ts) = showParen (d >ᵇ appPrec) ("Struct " ++ showVec (\t -> go 0 t) ts)

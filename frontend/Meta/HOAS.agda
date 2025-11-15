@@ -6,6 +6,8 @@ module Meta.HOAS where
 
 --------------------------------------------------------------------------------
 
+open import Function
+
 open import Data.Bool using ( Bool ; true ; false )
 open import Data.Nat using ( ℕ ; zero ; suc )
 open import Data.Fin using ( Fin ; cast ; inject₁ )
@@ -24,11 +26,13 @@ open import Meta.PrimOp
 --------------------------------------------------------------------------------
 
 private variable
-  s t u v w : Ty
+  ty  : Ty
+  s t : Ty
+  u v w : Ty
   n   : ℕ
   ts  : Vec Ty n
   ctx : Ctx n
-
+  
 {-# NO_POSITIVITY_CHECK #-}
 data Tm : (ty : Ty) -> Set where
   Lam : (Tm s -> Tm t) -> Tm (s ⇒ t)
@@ -36,12 +40,39 @@ data Tm : (ty : Ty) -> Set where
   App : Tm (s ⇒ t) -> Tm s -> Tm t
   Fix : Tm ((s ⇒ t) ⇒ (s ⇒ t)) -> Tm (s ⇒ t)
   Pri : PrimOp Tm t -> Tm t
-  IOp : InOut Tm -> Tm IO
-  Lit : Val t -> Tm t
+  --  IOs : Tm (Token ⇒ Pair t Token) -> Tm (IO t)
+  IOp : InOut Tm t -> Tm (IO t)
+  Lit : {t′ : VTy} -> {eq : vtyToTy t′ ≡ t} -> Val′ t′ -> Tm t
   Var : (s : Ty) -> (l : ℕ) -> Tm s        -- this is only for conversion to first order syntax
   Log : String -> Tm t -> Tm t             -- this is a hack to be able give names to subexpressions
   Dbg : String -> Tm s -> Tm t -> Tm t     -- printf debugging hack
-  
+
+--------------------------------------------------------------------------------
+
+{-
+data TmIO (ty : Ty) : Set where
+  MkTmIO : (Tm Token -> Tm (Pair ty Token)) -> TmIO ty
+
+runTmIO : TmIO ty -> Tm Token -> Tm (Pair ty Token)
+runTmIO (MkTmIO f) = f
+
+private
+  mkPair : Tm s -> Tm t -> Tm (Pair s t)
+  mkPair x y = Pri (MkPair x y)
+
+  fst : Tm (Pair s t) -> Tm s
+  fst x  = Pri (Fst x)
+
+  snd : Tm (Pair s t) -> Tm t
+  snd x  = Pri (Snd x)
+
+pureTmIO : Tm t -> TmIO t
+pureTmIO what = MkTmIO \rwt -> mkPair what rwt
+
+bindTmIO : TmIO s -> (Tm s -> TmIO t) -> TmIO t
+bindTmIO (MkTmIO u) h = MkTmIO $ \rwt -> Let (u rwt) \pair -> runTmIO (h (fst pair)) (snd pair)
+-}
+
 --------------------------------------------------------------------------------
 
 Lam2 : (Tm s -> Tm t -> Tm u) -> Tm (s ⇒ t ⇒ u)
@@ -78,3 +109,4 @@ Fix2'' {a} {b} f g h = Decl a \a' -> Decl b \b' -> Def a' (App2 f a' b') $ Def b
 -}
 
 --------------------------------------------------------------------------------
+

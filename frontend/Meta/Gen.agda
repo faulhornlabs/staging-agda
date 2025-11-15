@@ -13,7 +13,7 @@ open import Data.Vec
 open import Data.Maybe using ( Maybe ; nothing ; just )
 open import Data.String using ( String )
 
-open import Meta.Ty using ( Ty ; Pair ; Vect )
+open import Meta.Ty using ( Ty ; Unit ; Pair ; Vect ; IO )
 open import Meta.HOAS
 open import Meta.Lib using ( fst ; snd ; mkPair ; vecproj )
 
@@ -68,20 +68,25 @@ pair⇓ action = runGen do
   
 --------------------------------------------------------------------------------
 
---  data Gen (A : Set) : Set where
---  MkGen : (∀ {ty} -> (A -> Tm ty) -> Tm ty) -> Gen A
+import Meta.Lib
 
---  halt : Tm IO
---  halt = IOp Halt
+{-
+data GenIO (A : Set) : Set where
+  MkGenIO : (∀ {ty} -> (A -> Tm (IO ty)) -> Tm (IO ty)) -> GenIO A
 
---  get′ : String -> (ty : Ty) -> (Tm ty -> Tm IO) -> Tm IO  
---  get′ name ty kont = IOp (Get name kont)
+genIO : Tm (IO ty) -> GenIO (Tm ty)
+genIO action = MkGenIO \k -> {!!}
 
---  get : {ty : Ty} -> String -> (Tm ty -> Tm IO) -> Tm IO
---  get {ty} name kont = get′ name ty kont
+putIO : String -> Tm ty -> GenIO (Tm Unit)
+putIO name what = MkGenIO \k -> {!!} -- Meta.Lib.IOLib.put ?
 
---  put : {ty : Ty} -> String -> Tm ty -> Tm IO -> Tm IO
---  put {ty} name what kont = IOp (Put name what kont)
+returnIO : Tm ty -> GenIO (Tm ty)
+returnIO what = MkGenIO \k -> Meta.Lib.IOLib.return (k what) 
+
+-- bindIO : GenIO A -> (A -> GenIO B) -> GenIO B
+-- bindIO (MkGen action) next = MkGenIO
+
+-}
 
 --------------------------------------------------------------------------------
 -- these seem to require Gen (?), so i couldn't put them into Lib

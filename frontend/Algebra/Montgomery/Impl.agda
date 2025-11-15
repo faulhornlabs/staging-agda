@@ -29,7 +29,7 @@ import Data.Nat.Properties
 
 open import Meta.Object
 open import Meta.Show
-open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; mkBigInt ; mkBigInt' ; bigproj )
+open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; BigIntVTy ; BigIntVTy' ; mkBigInt ; mkBigInt' ; bigproj )
 open import Algebra.Limbs
 open import Algebra.U128 using ( addU64toU64 ; addU64toU128 )
 open import Algebra.Misc 
@@ -56,8 +56,8 @@ private
 
 private 
 
-  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Val (BigInt nlimbs))
-  Σlimbs = natToBigInt prime
+  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Val′ (BigIntVTy nlimbs))
+  Σlimbs = natToBigIntVTy prime
 
 #limbs : ℕ
 #limbs = proj₁ Σlimbs
@@ -67,12 +67,19 @@ private
 
 private 
 
-  primeBigIntVal : Val (BigInt #limbs)
-  primeBigIntVal = proj₂ Σlimbs
+  mkBigLit' : Val′ (BigIntVTy' #limbs) -> Tm (BigInt' #limbs)
+  mkBigLit' = BigInt.mkBigIntLit'
+  
+  mkBigLit : Val′ (BigIntVTy #limbs) -> Tm (BigInt #limbs)
+  mkBigLit = BigInt.mkBigIntLit
+  
+private 
+
+  primeBigIntVal′ : Val′ (BigIntVTy #limbs)
+  primeBigIntVal′ = proj₂ Σlimbs
 
   primeBigInt : Tm (BigInt #limbs)
-  primeBigInt = Lit primeBigIntVal
-  
+  primeBigInt = mkBigLit primeBigIntVal′ 
 
 tyName : String
 tyName = Data.String._++_ "Mont" (Data.Nat.Show.show prime)
@@ -88,10 +95,19 @@ Big = BigInt #limbs
 Big² : Ty
 Big² = BigInt 2×#limbs
 
+Mont′ : VTy
+Mont′ = Named′ tyName (BigIntVTy #limbs)
+
 Mont : Ty
 Mont = Named tyName Big  
 
 private 
+
+  lemma-Mont : vtyToTy Mont′ ≡ Mont
+  lemma-Mont = trustMe
+
+  mkMontLit : Val′ Mont′ -> Tm Mont
+  mkMontLit val′ = Lit {eq = lemma-Mont} val′
 
   unwrap1 : {ty : Ty} -> Tm Mont -> (Tm Big -> Tm ty) -> Tm ty
   unwrap1 tm f = Let (unwrap tm) f
@@ -127,22 +143,22 @@ private
     R3-ℕ = (R2-ℕ * R1-ℕ) % prime
 
   R1' : Tm Big'
-  R1' = Lit (bigInt'ValFromℕ R1-ℕ)
+  R1' = mkBigLit' (bigInt'ValFromℕ R1-ℕ)
 
   R2' : Tm Big'
-  R2' = Lit (bigInt'ValFromℕ R2-ℕ)
+  R2' = mkBigLit' (bigInt'ValFromℕ R2-ℕ)
 
   R3' : Tm Big'
-  R3' = Lit (bigInt'ValFromℕ R3-ℕ)
+  R3' = mkBigLit' (bigInt'ValFromℕ R3-ℕ)
 
   R1 : Tm Big
-  R1 = Lit (bigIntValFromℕ R1-ℕ)
+  R1 = mkBigLit (bigIntValFromℕ R1-ℕ)
 
   R2 : Tm Big
-  R2 = Lit (bigIntValFromℕ R2-ℕ)
+  R2 = mkBigLit (bigIntValFromℕ R2-ℕ)
 
   R3 : Tm Big
-  R3 = Lit (bigIntValFromℕ R3-ℕ)
+  R3 = mkBigLit (bigIntValFromℕ R3-ℕ)
 
 --------------------------------------------------------------------------------
 
@@ -174,7 +190,7 @@ private
   montQ-OK = eqWord64 montQ-sanityTest (negWord64 (fromℕ 1))
 
   montQTm : Tm U64
-  montQTm = Lit (U64V montQ)
+  montQTm = Lit {eq = refl} (U64V′ montQ)
 
 
 sanityCheckMontgomeryText : String
@@ -459,13 +475,13 @@ square mont = unwrap1 mont \big -> runGen do
 
 -------------------------------------------------------------------------------- 
 
-montValFromℕ : ℕ -> Val Mont
-montValFromℕ k = WrapV (bigIntValFromℕ montk) where
+montValFromℕ : ℕ -> Val′ Mont′
+montValFromℕ k = WrapV′ (bigIntValFromℕ montk) where
   montk : ℕ
   montk = ((k * R-full-ℕ) % prime)
 
 montFromℕ : ℕ -> Tm Mont
-montFromℕ k = Lit (montValFromℕ k)
+montFromℕ k = mkMontLit (montValFromℕ k)
 
 isEqualℕ : ℕ -> Tm Mont -> Tm Bit
 isEqualℕ k mont = isEqual (montFromℕ k) mont
