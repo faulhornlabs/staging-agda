@@ -17,6 +17,7 @@ open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary.Decidable
 
 open import Meta.Show
+open import Meta.HList
 
 --------------------------------------------------------------------------------
 
@@ -24,6 +25,8 @@ private variable
   n : ℕ
 
 -- value types
+-- a separate type is a BAD IDEA, it makes everything extremely cumbersome
+-- better include a proof of being a value type...
 data VTy : Set where
   Unit′   : VTy
   Token′  : VTy
@@ -36,7 +39,11 @@ data VTy : Set where
 --------------------------------------------------------------------------------
 
 -- all types
-data Ty : Set where
+data Ty    : Set
+-- data VTy   : Set
+-- data IsVTy : Ty -> Set
+
+data Ty where
   -- LC
   Unit  : Ty
   _⇒_   : Ty -> Ty -> Ty
@@ -54,6 +61,34 @@ data Ty : Set where
   Ptr    : VTy -> Ty  
 
 infixr 30 _⇒_
+
+{-
+-- proof that this is a value type
+data IsVTy where
+  Unit′   : IsVTy Unit
+  Token′  : IsVTy Token
+  Bit′    : IsVTy Bit
+  U64′    : IsVTy U64
+  Nat′    : IsVTy Nat
+  Struct′ : {n : ℕ} -> (ts : Vec Ty n) -> HList IsVTy ts -> IsVTy (Struct ts)
+  Named′  : (name : String) -> {ty : Ty} -> IsVTy ty -> IsVTy (Named name ty)
+
+
+data VTy where
+  MkVTy : (ty : Ty) -> IsVTy ty -> VTy
+
+isVTy′ : Ty -> Maybe IsVTy
+
+{-# NON_COVERING #-}
+isVTy : Ty -> Maybe VTy
+isVTy ty with isVTy′ ty
+... | just prf = MkVTy ty prf
+
+vtyToTy : VTy -> Ty
+vtyToTy (MkVTy ty prf) = ty
+
+
+-}
 
 ----------------------------------------
 

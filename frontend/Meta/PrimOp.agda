@@ -160,6 +160,53 @@ mapPrim {tm₁} {tm₂} f what = go what where
 -}
   go (WrapPrimIO pio)    = WrapPrimIO (mapPrimIO f pio)
 
+
+--------------------------------------------------------------------------------
+
+{-
+transformPrim : {tm₁ tm₂ : Ty -> Set} -> (h : Ty -> Ty) -> ({s : Ty} -> tm₁ s -> tm₂ (h s)) -> {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ (h t)
+transformPrim {tm₁} {tm₂} h f what = go what where
+  go : {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ (h t)
+  go (DummyPrimOp ty)    = DummyPrimOp (h ty)
+  go (AddU64 x y)        = AddU64 (f x) (f y)
+  go (SubU64 x y)        = SubU64 (f x) (f y)
+  go (AddCarryU64 c x y) = AddCarryU64 (f c) (f x) (f y)
+  go (SubCarryU64 c x y) = SubCarryU64 (f c) (f x) (f y)
+  go (MulTruncU64 x y)   = MulTruncU64 (f x) (f y)
+  go (MulExtU64 x y)     = MulExtU64 (f x) (f y)
+  go (MulAddU64 a x y)   = MulAddU64 (f a) (f x) (f y)
+  go (BitComplement x)   = BitComplement (f x)
+  go (BitOr  x y)        = BitOr  (f x) (f y)
+  go (BitAnd x y)        = BitAnd (f x) (f y)
+  go (BitXor x y)        = BitXor (f x) (f y)
+  go (RotLeftU64   c x)  = RotLeftU64  (f c) (f x)
+  go (RotRightU64  c x)  = RotRightU64 (f c) (f x)
+  go (EqU64 x y)         = EqU64 (f x) (f y)
+  go (LtU64 x y)         = LtU64 (f x) (f y)
+  go (LeU64 x y)         = LeU64 (f x) (f y)
+  go (CastBitU64 x)      = CastBitU64 (f x)
+  go (Not x)             = Not (f x)
+  go (And x y)           = And (f x) (f y)
+  go (Or  x y)           = Or  (f x) (f y)
+  go (IFTE b x y)        = IFTE (f b) (f x) (f y)
+  go (MkStruct s)        = MkStruct (Meta.HList.transform f s)
+  go (Proj j s)          = Proj j (f s)
+  go (Wrap n x)          = Wrap n (f x)
+  go (Unwrap y)          = Unwrap (f y)
+  go Zero                = Zero
+  go (Succ x)            = Succ (f x)
+  go (IsZero x)          = IsZero (f x)
+  go (NatSplit n z s)    = NatSplit (f n) (f z) (f s)
+  go (NatAdd x y)        = NatAdd (f x) (f y)
+  go (NatSubTrunc x y)   = NatSubTrunc (f x) (f y)
+  go (NatMul x y)        = NatMul (f x) (f y)
+{-
+  go (Input  n t)        = Input n t
+  go (Output n y)        = Output n (f y)
+-}
+  go (WrapPrimIO pio)    = WrapPrimIO (mapPrimIO f pio)
+-}
+
 --------------------------------------------------------------------------------
 
 traversePrim : {F : Set -> Set} -> {tm₁ tm₂ : Ty -> Set} -> RawApplicative F -> ({s : Ty} -> tm₁ s -> F (tm₂ s)) -> {t : Ty} -> PrimOp tm₁ t -> F (PrimOp tm₂ t)

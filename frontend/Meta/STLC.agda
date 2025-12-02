@@ -10,6 +10,7 @@ open import Data.Nat using ( ℕ ; zero ; suc  )
 open import Data.Fin using ( Fin ; fromℕ ; opposite ; cast ; inject₁ ) renaming ( zero to fzero ; suc to fsuc )
 open import Data.Vec using ( Vec ; _∷_ ; [] ; lookup )
 open import Data.String
+open import Data.Maybe
 
 open import Relation.Binary.PropositionalEquality
 
@@ -22,6 +23,7 @@ open import Meta.IO
 --------------------------------------------------------------------------------
 
 private variable
+  ty  : Ty
   s t : Ty
   u v : Ty
   n   : ℕ

@@ -8,7 +8,6 @@ module Meta.CtxLemmas where
 open import Function
 open import Relation.Binary.PropositionalEquality
 
--- open import Data.Empty
 open import Data.Nat
 open import Data.Nat.Properties using ( +-suc )
 open import Data.Vec
@@ -16,6 +15,7 @@ open import Data.Vec.Properties using ( take++drop≡id )
 open import Data.Fin using ( Fin ; opposite ; inject₁ ) renaming ( zero to fzero ; suc to fsuc )
 --open import Data.String using ( String )
 
+open import Meta.FinVec
 open import Meta.Ty
 open import Meta.Ctx
 open import Meta.PrimOp
@@ -33,19 +33,6 @@ private
     n m : ℕ
     ctx : Ctx n
     ty  : Ty
-{-
-  splitFin′ : (n m : ℕ) -> Fin (n + m) -> Fin n ⊎ Fin m
-  splitFin′ = go where
-    go : (n m : ℕ) -> Fin (n + m) -> Fin n ⊎ Fin m
-    go zero     m j        = inj₂ j
-    go (suc n₁) m fzero    = inj₁ fzero
-    go (suc n₁) m (fsuc j₁) with go n₁ m j₁
-    ... | inj₂ k = inj₂ k 
-    ... | inj₁ i = inj₁ (fsuc i)
-
-  splitFin : {n₁ n₂ : ℕ} -> Fin (n₁ + n₂) -> Fin n₁ ⊎ Fin n₂
-  splitFin {n₁ = n₁} {n₂ = n₂} = splitFin′ n₁ n₂
--}
 
   data LkpPrf (A : Set) (n : ℕ) (vec : Vec A n) (y : A) : Set where
     MkLkpPrf : (i : Fin n) -> Data.Vec.lookup vec i ≡ y -> LkpPrf A n vec y
@@ -100,63 +87,16 @@ insertIntoCtx {n₁ = n₁} {n₂ = n₂} ctx₁ ctx₂ u = go {ctx₁ = ctx₁}
   ... | MkVarPrf j′ eq′ = Var j′ eq′ 
 
   goIO {ctx₁ = ctx₁} {ctx₂ = ctx₂} inout = mapInOut go inout
-  
-{-
-  goIO (Pure′ what)     = Pure′ (go what)
-  goIO (Bind′ u h)      = Bind′ (go u) (go h)
-  goIO (Get′ name ty  ) = Get′ name ty
-  goIO (Put′ name what) = Put′ name (go what)
--}
 
   goPrim {n₁ = n₁} {n₂ = n₂} {ctx₁ = ctx₁} {ctx₂ = ctx₂} prim =
     mapPrim {tm₁ = LC (ctx₁ ++ ctx₂)} {tm₂ = (LC (ctx₁ ++ u ∷ ctx₂))} go prim
 
-{-
-  goPrim (PrimGet tok name ty  ) = PrimGet (go tok) name ty
-  goPrim (PrimPut tok name what) = PrimPut (go tok) name (go what)
--}
 
 inExtendedCtx  : (u : Ty) -> LC ctx ty -> LC (u ∷ ctx) ty 
 inExtendedCtx {ctx = ctx} u = insertIntoCtx [] ctx u
 
 inExtendedCtx2  : (u v : Ty) -> LC ctx ty -> LC (u ∷ v ∷ ctx) ty 
 inExtendedCtx2 u v term = inExtendedCtx u (inExtendedCtx v term)
-
-----------------------------------------
-
-private
-
-  import Data.Vec.Properties
-  lemma-opposite-n : (n : ℕ) -> opposite (Data.Fin.fromℕ n) ≡ fzero
-  lemma-opposite-n zero     = refl
-  lemma-opposite-n (suc n₁) = cong inject₁ (lemma-opposite-n n₁)  
-
-lemma-lkp-first : {A : Set} -> (vec : Vec A n) -> (s : A) -> lookup (s ∷ vec) fzero ≡ s
-lemma-lkp-first vec s = refl
-  
-lemma-lkp-last : {n : ℕ} -> (ctx : Ctx n) -> (s : Ty) -> lkpCtx (s ∷ ctx) (Data.Fin.fromℕ n) ≡ s
-lemma-lkp-last {n = n} ctx s with lemma-lkp-first ctx s
-... | eq rewrite (lemma-opposite-n n) = refl
-
-private
-
-  lemma-opposite-inject₁ : (k : Fin n) -> opposite (inject₁ k) ≡ fsuc (opposite k)
-  lemma-opposite-inject₁ fzero     = refl
-  lemma-opposite-inject₁ (fsuc k₁) = let eq = lemma-opposite-inject₁ k₁ in cong inject₁ eq 
-
-  lemma-lkp-fsuc : {A : Set} -> (vec : Vec A n) -> (s : A) -> (k : Fin n) -> lookup vec k ≡ lookup (s ∷ vec) (fsuc k)
-  lemma-lkp-fsuc vec s k = refl
-
-  lemma-lkp-penultimate′ : {n : ℕ} -> (ctx : Ctx n) -> (s t : Ty) -> lookup (s ∷ t ∷ ctx) (fsuc fzero) ≡ t
-  lemma-lkp-penultimate′ ctx s t = lemma-lkp-fsuc (t ∷ ctx) s fzero
-
-  lemma-lkp-map-idx : {ctx : Ctx n} -> {j k : Fin n} -> (j ≡ k) -> lookup ctx j ≡ lookup ctx k 
-  lemma-lkp-map-idx refl = refl
-  
-  lemma-lkp-penultimate : {n : ℕ} -> (ctx : Ctx n) -> (s t : Ty) -> lkpCtx (s ∷ t ∷ ctx) (inject₁ (Data.Fin.fromℕ n)) ≡ t
-  lemma-lkp-penultimate {n = n} ctx s t =
-    let eq = lemma-lkp-map-idx {ctx = s ∷ t ∷ ctx} (lemma-opposite-inject₁ (Data.Fin.fromℕ n))
-    in  trans eq (lemma-lkp-last ctx t)
 
 ----------------------------------------
 
@@ -177,5 +117,70 @@ fixToLetRec {n = n} {ctx = ctx} {u = u} unfix = Rec def body where
 
   body : LC (u ∷ ctx) u
   body = lastVar 
+
+--------------------------------------------------------------------------------
+
+private
+
+  variable
+    A : Set
+    vec : Vec A n
+
+  data LkpWhere (A : Set) (n₁ n₂ : ℕ) (vec₁ : Vec A n₁) (vec₂ : Vec A n₂) (u : A) (y : A) : Set where
+    This  : u ≡ y              -> LkpWhere A n₁ n₂ vec₁ vec₂ u y
+    Left  : LkpPrf A n₁ vec₁ y -> LkpWhere A n₁ n₂ vec₁ vec₂ u y
+    Right : LkpPrf A n₂ vec₂ y -> LkpWhere A n₁ n₂ vec₁ vec₂ u y
+
+  prependLkp : (u : A) -> {y : A} -> LkpPrf A n vec y -> LkpPrf A (suc n) (u ∷ vec) y
+  prependLkp u (MkLkpPrf i refl) = MkLkpPrf (fsuc i) refl
+  
+  findWhere :  {n₁ n₂ : ℕ} -> (vec₁ : Vec A n₁) (vec₂ : Vec A n₂) -> (u y : A)
+            -> LkpPrf A (n₁ + suc n₂) (vec₁ ++ u ∷ vec₂) y -> LkpWhere A n₁ n₂ vec₁ vec₂ u y
+  findWhere {n₁ = zero  } {n₂ = _     } []               vec₂  u y (MkLkpPrf  fzero    refl) = This refl
+  findWhere {n₁ = zero  } {n₂ = suc n′} []          (_ ∷ vec′) u y (MkLkpPrf (fsuc i′) refl) = Right (MkLkpPrf i′ refl)
+  findWhere {n₁ = suc n′} {n₂ = n₂    } (_  ∷ vec′)      vec₂  u y (MkLkpPrf  fzero    refl) = Left  (MkLkpPrf fzero refl)
+  findWhere {n₁ = suc n′} {n₂ = n₂    } (x₀ ∷ vec′)      vec₂  u y (MkLkpPrf (fsuc i′) eq  ) with findWhere {n₁ = n′} {n₂ = n₂} vec′ vec₂  u y (MkLkpPrf i′ eq)
+  ... | This  eq  = This  eq
+  ... | Left  prf = Left  (prependLkp x₀ prf)
+  ... | Right prf = Right prf
+
+  data VarWhere (n₁ n₂ : ℕ) (ctx₁ : Ctx n₁) (ctx₂ : Ctx n₂) (u ty : Ty) : Set where
+    This′  : u ≡ ty            -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
+    Left′  : VarPrf n₁ ctx₁ ty -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
+    Right′ : VarPrf n₂ ctx₂ ty -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
+
+{-
+  findWhere′ : {n₁ n₂ : ℕ} -> (ctx₁ : Ctx n₁) (ctx₂ : Ctx n₂) -> (u ty : Ty)
+            -> VarPrf (n₁ + suc n₂) (ctx₁ ++ u ∷ ctx₂) ty -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
+  findWhere′ ctx₁ ctx₂ u ty varprf with (let prf = (varToLkp varprf) in findWhere ctx₂ ctx₁ u ty {!!})
+  ... | This eq = This′ eq
+-}
+
+
+{-
+{-# TERMINATING #-}
+removeFromCtx :  {n₁ n₂ : ℕ} -> (ctx₁ : Ctx n₁) -> (ctx₂ : Ctx n₂)
+              -> {u : Ty} -> LC ctx₂ u
+              -> LC (ctx₁ ++ u ∷ ctx₂) ty -> LC (ctx₁ ++ ctx₂) ty
+removeFromCtx {n₁ = n₁} {n₂ = n₂} ctx₁ ctx₂ {u = u} replaceBy = go {ctx₁ = ctx₁} {ctx₂ = ctx₂} where
+
+  go     :  {ty : Ty} -> {n₁ n₂ : ℕ} -> {ctx₁ : Ctx n₁} -> {ctx₂ : Ctx n₂} ->          LC (ctx₁ ++ u ∷ ctx₂)  ty -> LC          (ctx₁ ++ ctx₂)  ty
+  go {ty = ty} {n₁ = n₁} {n₂ = n₂} {ctx₁ = ctx₁} {ctx₂ = ctx₂} (Var j eq) with findWhere′ ctx₁ ctx₂ u ty (MkVarPrf j eq)
+  ... | Left′ (MkVarPrf j′ eq′) = {!!}
+
+substitute : {n₀ : ℕ} -> {ctx₀ : Ctx n₀} -> {s₀ t₀ : Ty} -> LC (s₀ ∷ ctx₀) t₀ -> LC ctx₀ s₀ -> LC ctx₀ t₀
+substitute {n₀ = n₀} {ctx₀ = ctx₀} {s₀ = s₀} body what = removeFromCtx [] ctx₀ {s₀} what body
+-}
+
+----------------------------------------
+
+{-
+removeAppLam : LC ctx ty -> LC ctx ty
+removeAppLam = go where
+  go : {s : Ty} -> LC ctx s -> LC ctx s
+  -- body : LC (s ∷ ctx) t
+  -- arg  : s
+  go (App {s = s} {t = t} (Lam body) arg) = substitute 
+-}
 
 --------------------------------------------------------------------------------

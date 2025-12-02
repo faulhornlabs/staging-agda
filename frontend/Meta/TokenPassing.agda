@@ -19,6 +19,7 @@ open import Data.Fin using ( Fin ; opposite ; inject₁ ) renaming ( zero to fze
 open import Data.String using ( String )
 
 open import Meta.HList using ( mapHList ; zipHList′ )
+open import Meta.FinVec using ( lemma-lkp-last) 
 open import Meta.Ty
 open import Meta.Ctx
 open import Meta.CtxLemmas
@@ -158,10 +159,10 @@ translateIO = go where
      let rw = lastVar
      in  LamTok (WrapIO (PrimGet rw name (convTy t)))
 
-  goIO (Alloc size) =
+  goIO (Alloc size vty) =
      let rw = lastVar
          size' = inExtendedCtx Token (go size)
-     in  LamTok (WrapIO (PrimAlloc rw size'))
+     in  LamTok (WrapIO (PrimAlloc rw size' vty))
 
   goIO (Free ptr) =
      let rw = lastVar
