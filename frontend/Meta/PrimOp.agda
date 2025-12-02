@@ -13,6 +13,9 @@ open import Data.Product using ( _×_ ; _,_ )
 
 import Data.Maybe.Effectful
 open import Effect.Applicative
+open import Effect.Monad.Identity
+  using    ( Identity ; mkIdentity ; runIdentity )
+  renaming ( applicative to identityApplicative )
 
 --open import Data.Bool
 --open import Data.Word64
@@ -44,8 +47,6 @@ private variable
   ts  : Vec Ty n
   
 data PrimOp (tm : Ty -> Set) : Ty -> Set where
-  -- hackety hack hack
-  DummyPrimOp   : (t : Ty) -> PrimOp tm t  
   -- 64-bit arithmetic
   AddU64        : tm U64 -> tm U64 -> PrimOp tm U64
   SubU64        : tm U64 -> tm U64 -> PrimOp tm U64
@@ -86,13 +87,8 @@ data PrimOp (tm : Ty -> Set) : Ty -> Set where
   NatAdd        : tm Nat -> tm Nat -> PrimOp tm Nat
   NatSubTrunc   : tm Nat -> tm Nat -> PrimOp tm Nat
   NatMul        : tm Nat -> tm Nat -> PrimOp tm Nat
-  -- input / output
-  WrapPrimIO    : PrimIO tm t -> PrimOp tm t
-  
-{-
-  Input         : String -> (ty : Ty) -> PrimOp tm ty
-  Output        : String -> {ty : Ty} -> tm ty -> PrimOp tm Unit
--}
+  -- IO (input/output, memory allocation, etc)
+  WrapPrimIO    : PrimIO tm t -> tm Token -> PrimOp tm (Pair t Token)
 
 --------------------------------------------------------------------------------
 
@@ -118,97 +114,6 @@ GeU64 x y = LeU64 y x
 
 --------------------------------------------------------------------------------
 
-mapPrim : {tm₁ tm₂ : Ty -> Set} -> ({s : Ty} -> tm₁ s -> tm₂ s) -> {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ t
-mapPrim {tm₁} {tm₂} f what = go what where
-  go : {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ t
-  go (DummyPrimOp ty)    = DummyPrimOp ty
-  go (AddU64 x y)        = AddU64 (f x) (f y)
-  go (SubU64 x y)        = SubU64 (f x) (f y)
-  go (AddCarryU64 c x y) = AddCarryU64 (f c) (f x) (f y)
-  go (SubCarryU64 c x y) = SubCarryU64 (f c) (f x) (f y)
-  go (MulTruncU64 x y)   = MulTruncU64 (f x) (f y)
-  go (MulExtU64 x y)     = MulExtU64 (f x) (f y)
-  go (MulAddU64 a x y)   = MulAddU64 (f a) (f x) (f y)
-  go (BitComplement x)   = BitComplement (f x)
-  go (BitOr  x y)        = BitOr  (f x) (f y)
-  go (BitAnd x y)        = BitAnd (f x) (f y)
-  go (BitXor x y)        = BitXor (f x) (f y)
-  go (RotLeftU64   c x)  = RotLeftU64  (f c) (f x)
-  go (RotRightU64  c x)  = RotRightU64 (f c) (f x)
-  go (EqU64 x y)         = EqU64 (f x) (f y)
-  go (LtU64 x y)         = LtU64 (f x) (f y)
-  go (LeU64 x y)         = LeU64 (f x) (f y)
-  go (CastBitU64 x)      = CastBitU64 (f x)
-  go (Not x)             = Not (f x)
-  go (And x y)           = And (f x) (f y)
-  go (Or  x y)           = Or  (f x) (f y)
-  go (IFTE b x y)        = IFTE (f b) (f x) (f y)
-  go (MkStruct s)        = MkStruct (Meta.HList.transform f s)
-  go (Proj j s)          = Proj j (f s)
-  go (Wrap n x)          = Wrap n (f x)
-  go (Unwrap y)          = Unwrap (f y)
-  go Zero                = Zero
-  go (Succ x)            = Succ (f x)
-  go (IsZero x)          = IsZero (f x)
-  go (NatSplit n z s)    = NatSplit (f n) (f z) (f s)
-  go (NatAdd x y)        = NatAdd (f x) (f y)
-  go (NatSubTrunc x y)   = NatSubTrunc (f x) (f y)
-  go (NatMul x y)        = NatMul (f x) (f y)
-{-
-  go (Input  n t)        = Input n t
-  go (Output n y)        = Output n (f y)
--}
-  go (WrapPrimIO pio)    = WrapPrimIO (mapPrimIO f pio)
-
-
---------------------------------------------------------------------------------
-
-{-
-transformPrim : {tm₁ tm₂ : Ty -> Set} -> (h : Ty -> Ty) -> ({s : Ty} -> tm₁ s -> tm₂ (h s)) -> {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ (h t)
-transformPrim {tm₁} {tm₂} h f what = go what where
-  go : {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ (h t)
-  go (DummyPrimOp ty)    = DummyPrimOp (h ty)
-  go (AddU64 x y)        = AddU64 (f x) (f y)
-  go (SubU64 x y)        = SubU64 (f x) (f y)
-  go (AddCarryU64 c x y) = AddCarryU64 (f c) (f x) (f y)
-  go (SubCarryU64 c x y) = SubCarryU64 (f c) (f x) (f y)
-  go (MulTruncU64 x y)   = MulTruncU64 (f x) (f y)
-  go (MulExtU64 x y)     = MulExtU64 (f x) (f y)
-  go (MulAddU64 a x y)   = MulAddU64 (f a) (f x) (f y)
-  go (BitComplement x)   = BitComplement (f x)
-  go (BitOr  x y)        = BitOr  (f x) (f y)
-  go (BitAnd x y)        = BitAnd (f x) (f y)
-  go (BitXor x y)        = BitXor (f x) (f y)
-  go (RotLeftU64   c x)  = RotLeftU64  (f c) (f x)
-  go (RotRightU64  c x)  = RotRightU64 (f c) (f x)
-  go (EqU64 x y)         = EqU64 (f x) (f y)
-  go (LtU64 x y)         = LtU64 (f x) (f y)
-  go (LeU64 x y)         = LeU64 (f x) (f y)
-  go (CastBitU64 x)      = CastBitU64 (f x)
-  go (Not x)             = Not (f x)
-  go (And x y)           = And (f x) (f y)
-  go (Or  x y)           = Or  (f x) (f y)
-  go (IFTE b x y)        = IFTE (f b) (f x) (f y)
-  go (MkStruct s)        = MkStruct (Meta.HList.transform f s)
-  go (Proj j s)          = Proj j (f s)
-  go (Wrap n x)          = Wrap n (f x)
-  go (Unwrap y)          = Unwrap (f y)
-  go Zero                = Zero
-  go (Succ x)            = Succ (f x)
-  go (IsZero x)          = IsZero (f x)
-  go (NatSplit n z s)    = NatSplit (f n) (f z) (f s)
-  go (NatAdd x y)        = NatAdd (f x) (f y)
-  go (NatSubTrunc x y)   = NatSubTrunc (f x) (f y)
-  go (NatMul x y)        = NatMul (f x) (f y)
-{-
-  go (Input  n t)        = Input n t
-  go (Output n y)        = Output n (f y)
--}
-  go (WrapPrimIO pio)    = WrapPrimIO (mapPrimIO f pio)
--}
-
---------------------------------------------------------------------------------
-
 traversePrim : {F : Set -> Set} -> {tm₁ tm₂ : Ty -> Set} -> RawApplicative F -> ({s : Ty} -> tm₁ s -> F (tm₂ s)) -> {t : Ty} -> PrimOp tm₁ t -> F (PrimOp tm₂ t)
 traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
 
@@ -216,7 +121,6 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   _<*>_ = RawApplicative._<*>_ applicative
 
   go : {t : Ty} -> PrimOp tm₁ t -> F (PrimOp tm₂ t)
-  go (DummyPrimOp ty)    = pure (DummyPrimOp ty)
   go (AddU64 x y)        = (| AddU64 (f x) (f y)             |)
   go (SubU64 x y)        = (| SubU64 (f x) (f y)             |)
   go (MulTruncU64 x y)   = (| MulTruncU64 (f x) (f y)        |)
@@ -253,7 +157,12 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   go (Input  n t)        = pure (Input n t)                    
   go (Output n y)        = (| (Output n) (f y)               |)
 -}
-  go (WrapPrimIO pio)    = (| WrapPrimIO (traversePrimIO applicative f pio) |)
+  go (WrapPrimIO pio rwt)  = (| WrapPrimIO (traversePrimIO applicative f pio) (f rwt) |)
+
+mapPrim : {tm₁ tm₂ : Ty -> Set} -> ({s : Ty} -> tm₁ s -> tm₂ s) -> {t : Ty} -> PrimOp tm₁ t -> PrimOp tm₂ t
+mapPrim {tm₁} {tm₂} f what = runIdentity (traversePrim {F = Identity} identityApplicative h′ what) where
+  h′ : ∀ {t} -> tm₁ t -> Identity (tm₂ t)
+  h′ tm = mkIdentity (f tm)
 
 mapMaybePrim
   :  {tm₁ tm₂ : Ty -> Set}
@@ -289,7 +198,6 @@ showRawPrimPrec = go where
 primOpForget : {tm : Ty -> Set} -> {A : Set} -> {t : Ty} -> ({t : Ty} -> tm t -> A) -> PrimOp tm t -> RawPrim × List A
 primOpForget {tm} {A} f = go where
   go : {ty : Ty} -> PrimOp tm ty -> RawPrim × List A
-  go (DummyPrimOp ty)    = MkRawPrim "DummyPrimOp"   , [] 
   go (AddU64 x y)        = MkRawPrim "AddU64"        , (f x ∷ f y ∷ [])
   go (SubU64 x y)        = MkRawPrim "SubU64"        , (f x ∷ f y ∷ [])
   go (AddCarryU64 c x y) = MkRawPrim "AddCarryU64"   , (f c ∷ f x ∷ f y ∷ [])
@@ -326,6 +234,6 @@ primOpForget {tm} {A} f = go where
   go (Input  n t)        = RawInput  n t             , []
   go (Output n y)        = RawOutput n               , (f y ∷ [])
 -}
-  go (WrapPrimIO pio)    = let pair = primIOForget f pio in MkRawPrimIO (fst pair) , snd pair
+  go (WrapPrimIO pio rwt)  = let pair = primIOForget f pio in MkRawPrimIO (fst pair) , Data.List._++_ (snd pair)(f rwt ∷ [])
   
 --------------------------------------------------------------------------------

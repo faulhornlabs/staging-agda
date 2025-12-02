@@ -69,12 +69,10 @@ insertIntoCtx :  {n₁ n₂ : ℕ} -> (ctx₁ : Ctx n₁) -> (ctx₂ : Ctx n₂)
 insertIntoCtx {n₁ = n₁} {n₂ = n₂} ctx₁ ctx₂ u = go {ctx₁ = ctx₁} {ctx₂ = ctx₂} where
 
   go     : {n₁ n₂ : ℕ} -> {ctx₁ : Ctx n₁} -> {ctx₂ : Ctx n₂} ->          LC (ctx₁ ++ ctx₂)  ty -> LC          (ctx₁ ++ u ∷ ctx₂)  ty
-  goIO   : {n₁ n₂ : ℕ} -> {ctx₁ : Ctx n₁} -> {ctx₂ : Ctx n₂} -> InOut   (LC (ctx₁ ++ ctx₂)) ty -> InOut   (LC (ctx₁ ++ u ∷ ctx₂)) ty 
   goPrim : {n₁ n₂ : ℕ} -> {ctx₁ : Ctx n₁} -> {ctx₂ : Ctx n₂} -> PrimOp  (LC (ctx₁ ++ ctx₂)) ty -> PrimOp  (LC (ctx₁ ++ u ∷ ctx₂)) ty
 
   go (App f x  )   = App (go f) (go x)
   go (Pri prim )   = Pri (goPrim prim)
-  go (IOp xio  )   = IOp (goIO xio)
   go (Lit {eq = refl} y)   = Lit {eq = refl} y
   go (Log s x  )   = Log s (go x)
   go (Dbg s x y)   = Dbg s (go x) (go y)
@@ -85,8 +83,6 @@ insertIntoCtx {n₁ = n₁} {n₂ = n₂} ctx₁ ctx₂ u = go {ctx₁ = ctx₁}
   go {ctx₁ = ctx₁} {ctx₂ = ctx₂} (Rec {u = u} rhs body) = Rec (go {ctx₁ = u ∷ ctx₁} {ctx₂ = ctx₂} rhs) (go {ctx₁ = u ∷ ctx₁} {ctx₂ = ctx₂} body)
   go {ctx₁ = ctx₁} {ctx₂ = ctx₂} (Var j eq) with insertVar ctx₁ ctx₂ u (MkVarPrf j eq)
   ... | MkVarPrf j′ eq′ = Var j′ eq′ 
-
-  goIO {ctx₁ = ctx₁} {ctx₂ = ctx₂} inout = mapInOut go inout
 
   goPrim {n₁ = n₁} {n₂ = n₂} {ctx₁ = ctx₁} {ctx₂ = ctx₂} prim =
     mapPrim {tm₁ = LC (ctx₁ ++ ctx₂)} {tm₂ = (LC (ctx₁ ++ u ∷ ctx₂))} go prim

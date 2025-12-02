@@ -85,7 +85,7 @@ valVec′ v = StructV′ (vecToHList Val′ v)
 valApp : Val (s ⇒ t) -> Val s -> Val t
 valApp (FunV f) x = f x
 
-valIO : Val (IO t) -> ⊥
-valIO ()
+-- valIO : Val (IO t) -> ⊥
+-- valIO ()
 
 --------------------------------------------------------------------------------

@@ -48,7 +48,6 @@ data Ty where
   Unit  : Ty
   _⇒_   : Ty -> Ty -> Ty
   -- IO
-  IO    : Ty -> Ty
   Token : Ty             -- type of the `RealWorld` token
   -- built-in
   Bit    : Ty
@@ -98,6 +97,10 @@ Idx = U64
 
 Pair : Ty -> Ty -> Ty
 Pair s t = Struct (s ∷ t ∷ [])
+
+opaque
+  IO : Ty -> Ty
+  IO ty = Token ⇒ Pair ty Token
 
 Vect : ℕ -> Ty -> Ty
 Vect n t = Struct (Data.Vec.replicate n t)
@@ -172,6 +175,7 @@ strEq s t | (just p) = STrue p
 ----------------------------------------
 
 tyEq     : (s t : Ty      ) -> SemiDec (s ≡ t)
+vtyEq    : (s t : VTy     ) -> SemiDec (s ≡ t)
 tyVecEq  : (u v : Vec Ty n) -> SemiDec (u ≡ v)
 
 tyEq = go where
@@ -183,10 +187,6 @@ tyEq = go where
   go Nat   Nat  = STrue refl
 
   go Token Token = STrue refl
-
-  go (IO s₁) (IO t₁) with go s₁ t₁ 
-  go (IO s₁) (IO t₁) | SFalse     = SFalse
-  go (IO s₁) (IO t₁) | STrue refl = STrue refl
 
 {-
   go (Array n s) (Array m t) with natEq n m
@@ -214,7 +214,14 @@ tyEq = go where
   go (Struct {n} u) (Struct {m} v) | STrue refl | SFalse     = SFalse
   go (Struct {n} u) (Struct {m} v) | STrue refl | STrue refl = STrue refl
 
+  go (Ptr s) (Ptr t) with vtyEq s t
+  ... | SFalse       = SFalse
+  ... | (STrue refl) = STrue refl
+
   go _ _ = SFalse
+
+-- TODO!!!
+vtyEq s t = SFalse
 
 tyVecEq []       []       = STrue refl
 tyVecEq (x ∷ xs) (y ∷ ys) with tyEq x y
@@ -225,21 +232,24 @@ tyVecEq (x ∷ xs) (y ∷ ys) | STrue refl | STrue refl = STrue refl
 
 --------------------------------------------------------------------------------
 
+-- opaque
+--   unfolding IO
+
 {-# TERMINATING #-}
 showTyPrec : ℕ -> Ty -> String
 showTyPrec = go where
 
-  go : ℕ -> Ty -> String
-  go d Unit        = "Unit"
-  go d Bit         = "Bit"
-  go d U64         = "U64"
-  go d Nat         = "Nat"
-  go d Token       = "Token"
-  go d (IO t)      = showParen (d >ᵇ appPrec) ("IO_ " ++ go appPrec₊₁ t)
-  go d (Named n t) = showParen (d >ᵇ appPrec) ("Named "  ++ quoteString n ++ " " ++ go appPrec₊₁ t) 
-  go d (s ⇒ t)     = showParen (d >ᵇ appPrec) ("Arrow "  ++ go appPrec₊₁ s ++ " " ++ go appPrec₊₁ t)
-  go d (Struct ts) = showParen (d >ᵇ appPrec) ("Struct " ++ showVec (\t -> go 0 t) ts)
-  go d (Ptr t)     = showParen (d >ᵇ appPrec) ("Ptr " ++ go appPrec₊₁ (vtyToTy t))
+    go : ℕ -> Ty -> String
+    go d Unit        = "Unit"
+    go d Bit         = "Bit"
+    go d U64         = "U64"
+    go d Nat         = "Nat"
+    go d Token       = "Token"
+--    go d (IO t)      = showParen (d >ᵇ appPrec) ("IO_ " ++ go appPrec₊₁ t)
+    go d (Named n t) = showParen (d >ᵇ appPrec) ("Named "  ++ quoteString n ++ " " ++ go appPrec₊₁ t) 
+    go d (s ⇒ t)     = showParen (d >ᵇ appPrec) ("Arrow "  ++ go appPrec₊₁ s ++ " " ++ go appPrec₊₁ t)
+    go d (Struct ts) = showParen (d >ᵇ appPrec) ("Struct " ++ showVec (\t -> go 0 t) ts)
+    go d (Ptr t)     = showParen (d >ᵇ appPrec) ("Ptr " ++ go appPrec₊₁ (vtyToTy t))
 
 showTy : Ty -> String
 showTy = showTyPrec 0

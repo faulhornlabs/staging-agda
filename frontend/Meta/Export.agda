@@ -20,7 +20,6 @@ open import Meta.PrimOp
 open import Meta.IO
 open import Meta.HList
 open import Meta.Show
-open import Meta.TokenPassing using ( convTy ; convCtx ; translateIO )
 
 import Meta.Val     as TVal
 import Meta.STLC    as STLC
@@ -148,7 +147,6 @@ convertToRaw = go where
   go (STLC.Var         j   _   )   = Var (Data.Fin.toℕ j)
   go (STLC.Lit         val     )   = Lit (valForget′ val)
   go (STLC.Pri         pri     )   = let raw , list = primOpForget go pri in Pri raw list
-  go (STLC.IOp         rawio   )   = Dum -- IOp (ioForget go rawio)
   -- go (STLC.Fix         rec     )   = Fix (go rec)
   go (STLC.Log         nam body)   = Log nam (go body)
   go (STLC.Dbg {s = s} nam x y )   = Dbg nam s (go x) (go y)
@@ -181,8 +179,7 @@ showRaw = showRawPrec 0
 exportToStringMaybe : {ty : Ty} -> HOAS.Tm ty -> Maybe String
 exportToStringMaybe tm = do
   lc <- Conv.convert tm
-  let lc' = translateIO lc
-  let raw = convertToRaw lc'
+  let raw = convertToRaw lc
   just (showRaw raw)
 
 {-# NON_COVERING #-}

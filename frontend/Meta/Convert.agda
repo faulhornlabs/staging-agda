@@ -50,39 +50,10 @@ convert' : Tm ty -> Maybe (LC ctx ty)
 convert' = go where
 
   go   : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> Tm ty       -> Maybe (LC ctx ty)
-  goIO : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> InOut Tm ty -> Maybe (InOut (LC ctx) ty)    -- InOut′ LC ctx ty)
-
-  --------------------
-
-  goIO {ctx = ctx} what = mapMaybeInOut go what 
-  
-{-  
-  goIO {n} {ctx} (Pure what) = do
-    what' <- go what
-    just (Pure′ what')
-
-  goIO {n} {ctx} (Bind {s = s} action next) = do
-    action' <- go action
-    next'   <- go (HOAS.App next (HOAS.Var s n))
-    just (Bind′ action' next')
-
-  goIO {n} {ctx} (Get name ty) = do
-    just (Get′ name ty)
-
-  goIO {n} {ctx} (Put {ty} name what) = do
-    what' <- go what
-    just (Put′ name what')
--}
-
-  --------------------
 
   -- eliminate `App Lam`
   go (HOAS.App (HOAS.Lam f) x) = go (f x)     
-  
-  go (HOAS.IOp io) = do
-   io' <- goIO io
-   just (STLC.IOp io')
-  
+    
   go {n} {ctx} (HOAS.Var s k) = do
     MkInCtx j t refl <- lkpCtxNatWithProof ctx k
     case tyEq s t of λ where

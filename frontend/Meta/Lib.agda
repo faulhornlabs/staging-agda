@@ -28,6 +28,7 @@ open import Meta.HOAS
 
 private variable
   s t : Ty
+  ty  : Ty
   n   : ℕ
   ts  : Vec Ty n
 
@@ -43,29 +44,70 @@ debug′ = Dbg
 
 --------------------------------------------------------------------------------
 
+module StructLib where
+
+  mkStruct : HList Tm ts -> Tm (Struct ts) 
+  mkStruct xs  = Pri (MkStruct xs)
+
+  mkVect : {n : ℕ} -> Vec (Tm t) n -> Tm (Struct (replicate n t))
+  mkVect xs = mkStruct (vecToHList Tm xs)
+  
+  proj : (k : Fin n) -> Tm (Struct {n} ts) -> Tm (Data.Vec.lookup ts k)
+  proj k what = Pri (Proj k what)
+
+  vecproj : {ty : Ty} -> (k : Fin n) -> Tm (Struct {n} (replicate n ty)) -> Tm ty
+  vecproj {n} {ty} k what = subst Tm (lookup-replicate k ty) (proj k what)
+  
+  mkPair : Tm s -> Tm t -> Tm (Pair s t)
+  mkPair x y = Pri (MkPair x y)
+
+  fst : Tm (Pair s t) -> Tm s
+  fst x  = Pri (Fst x)
+
+  snd : Tm (Pair s t) -> Tm t
+  snd x  = Pri (Snd x)
+
+  wrap : {name : String} -> Tm t -> Tm (Named name t)
+  wrap {t} {name} x = Pri (Wrap name x)
+
+  unwrap : {name : String} -> Tm (Named name t) -> Tm t
+  unwrap y = Pri (Unwrap y)
+
+open StructLib public
+
+--------------------------------------------------------------------------------
+-- IO
+
 module IOLib where
 
-  pure : Tm t -> Tm (IO t)
-  pure what = IOp (Pure what)
+  opaque
+    unfolding IO
+
+    pure : Tm s -> Tm (IO s)
+    pure y = Lam \rwt -> mkPair y rwt
+
+    bind : Tm (IO s) -> Tm (s ⇒ IO t) -> Tm (IO t)
+    bind u h = Lam \rwt -> Let (App u rwt) \pair -> App2 h (fst pair) (snd pair)
+
+    --------------------
+
+    private
+      --  WrapPrimIO : PrimIO tm t -> tm Token -> PrimOp tm (Pair t Token)
+      MkIO : PrimIO Tm ty -> Tm (Token ⇒ Pair ty Token)
+      MkIO what = Lam \rwt -> Pri (WrapPrimIO what rwt)
+  
+    get : String -> (ty : Ty) -> Tm (IO ty)
+    get name ty = MkIO (PrimGet name ty)
+
+    put : String -> Tm ty -> Tm (IO Unit)
+    put name what = MkIO (PrimPut name what)
 
   return : Tm t -> Tm (IO t)
   return = pure
-  
-  bind : Tm (IO s) -> Tm (s ⇒ IO t) -> Tm (IO t)
-  bind action next = IOp (Bind action next)
 
   then : Tm (IO s) -> Tm (IO t) -> Tm (IO t)
   then this next = bind this (Lam \_ -> next)
-  
-  get′ : String -> (ty : Ty) -> Tm (IO ty) 
-  get′ name ty = IOp (Get name ty)
 
-  get : {ty : Ty} -> String -> Tm (IO ty)
-  get {ty} name = get′ name ty
-
-  put : {ty : Ty} -> String -> Tm ty -> Tm (IO Unit)
-  put {ty} name what = IOp (Put name what)
-  
 --------------------------------------------------------------------------------
 
 ifte : Tm Bit -> Tm s -> Tm s -> Tm s
@@ -153,39 +195,6 @@ module NatLib where
 
   predNat : Tm Nat -> Tm Nat
   predNat n = subNat n (kstNat 1)
-
---------------------------------------------------------------------------------
-
-module StructLib where
-
-  mkStruct : HList Tm ts -> Tm (Struct ts) 
-  mkStruct xs  = Pri (MkStruct xs)
-
-  mkVect : {n : ℕ} -> Vec (Tm t) n -> Tm (Struct (replicate n t))
-  mkVect xs = mkStruct (vecToHList Tm xs)
-  
-  proj : (k : Fin n) -> Tm (Struct {n} ts) -> Tm (Data.Vec.lookup ts k)
-  proj k what = Pri (Proj k what)
-
-  vecproj : {ty : Ty} -> (k : Fin n) -> Tm (Struct {n} (replicate n ty)) -> Tm ty
-  vecproj {n} {ty} k what = subst Tm (lookup-replicate k ty) (proj k what)
-  
-  mkPair : Tm s -> Tm t -> Tm (Pair s t)
-  mkPair x y = Pri (MkPair x y)
-
-  fst : Tm (Pair s t) -> Tm s
-  fst x  = Pri (Fst x)
-
-  snd : Tm (Pair s t) -> Tm t
-  snd x  = Pri (Snd x)
-
-  wrap : {name : String} -> Tm t -> Tm (Named name t)
-  wrap {t} {name} x = Pri (Wrap name x)
-
-  unwrap : {name : String} -> Tm (Named name t) -> Tm t
-  unwrap y = Pri (Unwrap y)
-
-open StructLib public
 
 --------------------------------------------------------------------------------
 
