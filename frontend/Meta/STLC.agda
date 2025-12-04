@@ -37,7 +37,7 @@ data LC : Ctx n -> (ty : Ty) -> Set where
   Let : LC      ctx  s -> LC (s ∷ ctx) t -> LC ctx t
   Rec : LC (u ∷ ctx) u -> LC (u ∷ ctx) t -> LC ctx t      -- letrec
   Pri : PrimOp (LC ctx) t -> LC ctx t
-  Lit : {t′ : VTy} -> {eq : vtyToTy t′ ≡ t} -> Val′ t′ -> LC ctx t
+  Lit : Literal t         -> LC ctx t
   Var : (j : Fin n) -> lkpCtx ctx j ≡ t -> LC {n} ctx t
   Log : String -> LC ctx t -> LC ctx t
   Dbg : String -> LC ctx s -> LC ctx t -> LC ctx t

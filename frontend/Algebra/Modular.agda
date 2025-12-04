@@ -47,19 +47,19 @@ open U64Lib
 
 private
 
-  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Val′ (BigIntVTy nlimbs))
-  Σlimbs = natToBigIntVTy prime
+  Σlimbs :  Σ[ nlimbs ∈ ℕ ] (Literal (BigInt nlimbs))
+  Σlimbs = natToBigIntLit prime
 
 #limbs : ℕ
 #limbs = proj₁ Σlimbs
 
 private
 
-  primeBigIntVal′ : Val′ (BigIntVTy #limbs)
-  primeBigIntVal′ = proj₂ Σlimbs
+  primeBigIntLit : Literal (BigInt #limbs)
+  primeBigIntLit = proj₂ Σlimbs
 
   primeBigInt : Tm (BigInt #limbs)
-  primeBigInt = BigInt.mkBigIntLit primeBigIntVal′
+  primeBigInt = Lit primeBigIntLit
 
 tyName : String
 tyName = Data.String._++_ "Mod" (Data.Nat.Show.show prime)

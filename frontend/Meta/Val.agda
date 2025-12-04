@@ -22,21 +22,26 @@ open import Meta.HList
 
 private variable
   s t : Ty
+  ty : Ty
   n m : ℕ
   ts  : Vec Ty m
   nam : String
 
-  s′ t′ : VTy
-  ts′   : Vec VTy m
+--------------------------------------------------------------------------------
 
 {-# NO_POSITIVITY_CHECK #-}
-data Val′ : VTy -> Set where
-  TtV′     :                     Val′ Unit′
-  BitV′    : Bool             -> Val′ Bit′
-  U64V′    : Word64           -> Val′ U64′
-  NatV′    : ℕ                -> Val′ Nat′
-  StructV′ : HList Val′ ts′   -> Val′ (Struct′ ts′)
-  WrapV′   : Val′ t′          -> Val′ (Named′ nam t′)
+data Literal : Ty -> Set where
+  TtL     :                     Literal Unit
+  BitL    : Bool             -> Literal Bit
+  U64L    : Word64           -> Literal U64
+  NatL    : ℕ                -> Literal Nat
+  StructL : HList Literal ts -> Literal (Struct ts)
+  WrapL   : Literal t        -> Literal (Named nam t)
+
+litVec : Vec (Literal t) n -> Literal (Meta.Ty.Vect n t)
+litVec v = StructL (vecToHList Literal v) 
+
+--------------------------------------------------------------------------------
 
 {-# NO_POSITIVITY_CHECK #-}
 data Val : Ty -> Set where
@@ -49,36 +54,8 @@ data Val : Ty -> Set where
   FunV    : (Val s -> Val t) -> Val (s ⇒ t)
   -- ArrayV  : Vec (Val t) n    -> Val (Array n t)
 
-{-# TERMINATING #-}
-Val′-to-Val : Val′ t′ -> Val (vtyToTy t′)
-Val′-to-Val = go where
-  go : {ty′ : VTy} -> Val′ ty′ -> Val (vtyToTy ty′)
-  go  TtV′     = TtV
-  go (BitV′ b) = BitV b
-  go (U64V′ x) = U64V x
-  go (NatV′ n) = NatV n
-  go (StructV′ xs) = StructV (mapHList′ {F = Val′} {G = Val} vtyToTy go xs)
-  go (WrapV′   x ) = WrapV (go x)
-
-{-# TERMINATING #-}
-unsafe-Val-to-Val′ : Val t -> Val′ (unsafeTyToVTy t)
-unsafe-Val-to-Val′ = go where
-  {-# NON_COVERING #-}
-  go : {ty : Ty} -> Val ty -> Val′ (unsafeTyToVTy ty)
-  go TtV     = TtV′
-  go (BitV b) = BitV′ b
-  go (U64V x) = U64V′ x
-  go (NatV n) = NatV′ n
-  go (StructV xs) = StructV′ (mapHList′ {F = Val} {G = Val′} unsafeTyToVTy go xs)
-  go (WrapV   x ) = WrapV′ (go x)
-
---------------------------------------------------------------------------------
-
 valVec : Vec (Val t) n -> Val (Meta.Ty.Vect n t)
 valVec v = StructV (vecToHList Val v) 
-
-valVec′ : {t : VTy} -> Vec (Val′ t) n -> Val′ (Meta.Ty.Vect′ n t)
-valVec′ v = StructV′ (vecToHList Val′ v) 
 
 --------------------------------------------------------------------------------
 
@@ -87,5 +64,18 @@ valApp (FunV f) x = f x
 
 -- valIO : Val (IO t) -> ⊥
 -- valIO ()
+
+--------------------------------------------------------------------------------
+
+{-# TERMINATING #-}
+literalToVal : Literal ty -> Val ty
+literalToVal = go where
+  go : {ty : Ty} -> Literal ty -> Val ty
+  go TtL          = TtV
+  go (BitL b)     = BitV b
+  go (U64L x)     = U64V x 
+  go (NatL n)     = NatV n
+  go (StructL xs) = StructV (Meta.HList.transform go xs)
+  go (WrapL what) = WrapV (go what)
 
 --------------------------------------------------------------------------------

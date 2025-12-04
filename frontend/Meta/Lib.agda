@@ -35,7 +35,7 @@ private variable
 --------------------------------------------------------------------------------
 
 tt : Tm Unit
-tt = Lit {eq = refl} TtV′
+tt = Lit TtL
 
 --------------------------------------------------------------------------------
 
@@ -92,7 +92,11 @@ module IOLib where
     --------------------
 
     private
-      --  WrapPrimIO : PrimIO tm t -> tm Token -> PrimOp tm (Pair t Token)
+    
+      -- helper function. Recall that:
+      --
+      --   WrapPrimIO : PrimIO tm t -> tm Token -> PrimOp tm (Pair t Token)
+      --
       MkIO : PrimIO Tm ty -> Tm (Token ⇒ Pair ty Token)
       MkIO what = Lam \rwt -> Pri (WrapPrimIO what rwt)
   
@@ -122,7 +126,7 @@ _||_ b c = Pri (Or  b c)
 module BitLib where
  
   kstBit : Bool -> Tm Bit
-  kstBit b = Lit {eq = refl} (BitV′ b)
+  kstBit b = Lit (BitL b)
 
   zeroBit : Tm Bit
   zeroBit = kstBit Data.Bool.false
@@ -173,7 +177,7 @@ module BitLib where
 module NatLib where
 
   kstNat : ℕ -> Tm Nat
-  kstNat n = Lit {eq = refl} (NatV′ n)
+  kstNat n = Lit (NatL n)
 
   zeroNat : Tm Nat
   zeroNat = Pri Zero
@@ -201,7 +205,7 @@ module NatLib where
 module U64Lib where
 
   kstU64 : Word64 -> Tm U64
-  kstU64 x = Lit {eq = refl} (U64V′ x)
+  kstU64 x = Lit (U64L x)
 
   kstU64′ : ℕ -> Tm U64
   kstU64′ k = kstU64 (Data.Word64.fromℕ k)

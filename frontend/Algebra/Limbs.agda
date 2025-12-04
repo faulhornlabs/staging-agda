@@ -16,7 +16,7 @@ open import Data.Product
 
 open import Meta.Object
 
-open import Algebra.BigInt using ( BigInt ; BigInt' ; BigIntVTy ; BigIntVTy' )
+open import Algebra.BigInt using ( BigInt ; BigInt' )
 open import Algebra.Misc   using ( twoTo64 )
 
 --------------------------------------------------------------------------------
@@ -46,25 +46,15 @@ ex2 = natFromLimbs (proj₂ ex1)
 
 --------------------------------------------------------------------------------
 
-natToBigInt' : ℕ -> Σ[ nlimbs ∈ ℕ ] (Val (BigInt' nlimbs))
-natToBigInt' n with natToLimbs n
-natToBigInt' _ | (nlimbs , limbs) =
-  let big' = Meta.Object.valVec (Data.Vec.map Meta.Object.Val.U64V limbs)
+natToBigInt'Lit : ℕ -> Σ[ nlimbs ∈ ℕ ] (Literal (BigInt' nlimbs))
+natToBigInt'Lit n with natToLimbs n
+natToBigInt'Lit _ | (nlimbs , limbs) =
+  let big' = Meta.Object.litVec (Data.Vec.map Meta.Object.Literal.U64L limbs)
   in  (nlimbs , big')
 
-natToBigInt : ℕ -> Σ[ nlimbs ∈ ℕ ] (Val (BigInt nlimbs))
-natToBigInt n with natToBigInt' n
-natToBigInt _ | (nlimbs , big') = (nlimbs , Meta.Object.Val.WrapV big')
-
-natToBigIntVTy' : ℕ -> Σ[ nlimbs ∈ ℕ ] (Val′ (BigIntVTy' nlimbs))
-natToBigIntVTy' n with natToLimbs n
-natToBigIntVTy' _ | (nlimbs , limbs) =
-  let big' = Meta.Object.valVec′ (Data.Vec.map Meta.Object.Val′.U64V′ limbs)
-  in  (nlimbs , big')
-
-natToBigIntVTy : ℕ -> Σ[ nlimbs ∈ ℕ ] (Val′ (BigIntVTy nlimbs))
-natToBigIntVTy n with natToBigIntVTy' n
-natToBigIntVTy _ | (nlimbs , big') = (nlimbs , Meta.Object.Val′.WrapV′ big')
+natToBigIntLit : ℕ -> Σ[ nlimbs ∈ ℕ ] (Literal (BigInt nlimbs))
+natToBigIntLit n with natToBigInt'Lit n
+natToBigIntLit _ | (nlimbs , big') = (nlimbs , Meta.Object.Literal.WrapL big')
 
 --------------------------------------------------------------------------------
 -- Fit into given number of limbs
@@ -80,26 +70,15 @@ limbsFromℕ {nlimbs} = go nlimbs where
         ws = go k₁ (n / twoTo64)
     in  (w₀ ∷ ws)   
 
-bigInt'ValFromℕ : {nlimbs : ℕ} -> ℕ -> Val′ (BigIntVTy' nlimbs)
-bigInt'ValFromℕ {nlimbs} n with limbsFromℕ {nlimbs} n
-bigInt'ValFromℕ _ | limbs = Meta.Object.valVec′ (Data.Vec.map Meta.Object.Val′.U64V′ limbs)
+bigInt'LitFromℕ : {nlimbs : ℕ} -> ℕ -> Literal (BigInt' nlimbs)
+bigInt'LitFromℕ {nlimbs} n with limbsFromℕ {nlimbs} n
+bigInt'LitFromℕ _ | limbs = Meta.Object.litVec (Data.Vec.map Meta.Object.Literal.U64L limbs)
 
-bigIntValFromℕ : {nlimbs : ℕ} -> ℕ -> Val′ (BigIntVTy nlimbs)
-bigIntValFromℕ n = Meta.Object.Val′.WrapV′ (bigInt'ValFromℕ n)
+bigIntLitFromℕ : {nlimbs : ℕ} -> ℕ -> Literal (BigInt nlimbs)
+bigIntLitFromℕ n = Meta.Object.Literal.WrapL (bigInt'LitFromℕ n)
 
-private
-
-  helper : {nam : String} -> {ty′ : VTy} -> {ty : Ty} -> vtyToTy ty′ ≡ ty -> vtyToTy (Named′ nam ty′) ≡ Named nam ty
-  helper refl = refl
-  
-  lemma' : (nlimbs : ℕ) -> vtyToTy (BigIntVTy' nlimbs) ≡ BigInt' nlimbs
-  lemma' nlimbs = trustMe
-  
-  lemma : (nlimbs : ℕ) -> vtyToTy (BigIntVTy nlimbs) ≡ BigInt nlimbs
-  lemma n = helper (lemma' n)
-  
 bigIntFromℕ : {nlimbs : ℕ} -> ℕ -> Tm (BigInt nlimbs)
-bigIntFromℕ {nlimbs} n = Lit {eq = lemma nlimbs} (bigIntValFromℕ {nlimbs} n)
+bigIntFromℕ {nlimbs = nlimbs} n = Lit (bigIntLitFromℕ {nlimbs = nlimbs} n)
 
 --------------------------------------------------------------------------------
 

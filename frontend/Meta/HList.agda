@@ -76,13 +76,14 @@ traverse
   -> ({ty : Ty} -> F ty -> G (F ty))
   -> {ts : Vec Ty n}  -> HList F {n} ts -> G (HList F {n} ts)
 traverse {Ty = Ty} {G} {F} {n} applicative h = go where
-
   pure  = RawApplicative.pure  applicative
   _<*>_ = RawApplicative._<*>_ applicative
 
   go : {n : ℕ} -> {ts : Vec Ty n} -> HList F {n} ts -> G (HList F {n} ts)
   go Nil         = pure Nil
   go (Cons x xs) = (| Cons (h x) (go xs) |)
+
+--------------------
 
 traverse₂
   :  {G : Set -> Set} -> {F₁ F₂ : Ty -> Set}
@@ -91,13 +92,28 @@ traverse₂
   -> ({ty : Ty} -> F₁ ty -> G (F₂ ty))
   -> {ts : Vec Ty n} -> HList F₁ {n} ts -> G (HList F₂ {n} ts)
 traverse₂ {Ty = Ty} {G} {F₁} {F₂} {n} applicative h = go where
-
   pure  = RawApplicative.pure  applicative
   _<*>_ = RawApplicative._<*>_ applicative
 
   go : {n : ℕ} -> {ts : Vec Ty n} -> HList F₁ {n} ts -> G (HList F₂ {n} ts)
   go Nil         = pure Nil
   go (Cons x xs) = (| Cons (h x) (go xs) |)
+
+--------------------
+
+traverseTyVec
+  :  {G : Set -> Set} -> {F : Ty -> Set}
+  -> {n : ℕ}
+  -> RawApplicative G
+  -> ((ty : Ty) -> G (F ty))
+  -> (ts : Vec Ty n) -> G (HList F {n} ts)
+traverseTyVec {Ty = Ty} {G} {F} {n} applicative h = go where
+  pure  = RawApplicative.pure  applicative
+  _<*>_ = RawApplicative._<*>_ applicative
+
+  go : {n : ℕ} -> (ts : Vec Ty n) -> G (HList F {n} ts)
+  go []       = pure Nil
+  go (t ∷ ts) = (| Cons (h t) (go ts) |)
 
 --------------------------------------------------------------------------------
 

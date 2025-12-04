@@ -73,10 +73,9 @@ insertIntoCtx {n₁ = n₁} {n₂ = n₂} ctx₁ ctx₂ u = go {ctx₁ = ctx₁}
 
   go (App f x  )   = App (go f) (go x)
   go (Pri prim )   = Pri (goPrim prim)
-  go (Lit {eq = refl} y)   = Lit {eq = refl} y
+  go (Lit y    )   = Lit y
   go (Log s x  )   = Log s (go x)
   go (Dbg s x y)   = Dbg s (go x) (go y)
-  -- go (Fix f    )   = Fix (go f)
 
   go {ctx₁ = ctx₁} {ctx₂ = ctx₂} (Lam {s = s}     body) = Lam          (go {ctx₁ = s ∷ ctx₁} {ctx₂ = ctx₂} body)
   go {ctx₁ = ctx₁} {ctx₂ = ctx₂} (Let {s = s} rhs body) = Let (go rhs) (go {ctx₁ = s ∷ ctx₁} {ctx₂ = ctx₂} body)

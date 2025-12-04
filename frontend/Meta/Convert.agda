@@ -74,7 +74,7 @@ convert' = go where
     x' <- go x
     just (STLC.App f' x')
 
-  go (HOAS.Lit {eq = refl} v) = just (STLC.Lit {eq = refl} v)
+  go (HOAS.Lit v) = just (STLC.Lit v)
 
   go (HOAS.Pri prim) = do
     prim' <- mapMaybePrim go prim

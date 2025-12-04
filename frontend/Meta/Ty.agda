@@ -13,6 +13,8 @@ open import Data.Maybe
 
 open import Function using ( id )
 
+open import Effect.Applicative
+
 open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary.Decidable
 
@@ -24,24 +26,12 @@ open import Meta.HList
 private variable
   n : ℕ
 
--- value types
--- a separate type is a BAD IDEA, it makes everything extremely cumbersome
--- better include a proof of being a value type...
-data VTy : Set where
-  Unit′   : VTy
-  Token′  : VTy
-  Bit′    : VTy
-  U64′    : VTy
-  Nat′    : VTy
-  Struct′ : {n : ℕ} -> Vec VTy n -> VTy
-  Named′  : String -> VTy -> VTy
-
 --------------------------------------------------------------------------------
 
 -- all types
 data Ty    : Set
--- data VTy   : Set
--- data IsVTy : Ty -> Set
+data VTy   : Set
+data IsVTy : Ty -> Set
 
 data Ty where
   -- LC
@@ -61,33 +51,44 @@ data Ty where
 
 infixr 30 _⇒_
 
-{-
--- proof that this is a value type
+-- proof that this is a value type (really a Storable type, maybe rename at some point)
 data IsVTy where
-  Unit′   : IsVTy Unit
-  Token′  : IsVTy Token
-  Bit′    : IsVTy Bit
-  U64′    : IsVTy U64
-  Nat′    : IsVTy Nat
-  Struct′ : {n : ℕ} -> (ts : Vec Ty n) -> HList IsVTy ts -> IsVTy (Struct ts)
-  Named′  : (name : String) -> {ty : Ty} -> IsVTy ty -> IsVTy (Named name ty)
-
+  -- IsUnit   : IsVTy Unit
+  -- IsToken  : IsVTy Token
+  IsBit    : IsVTy Bit
+  IsU64    : IsVTy U64
+  -- IsNat    : IsVTy Nat
+  IsStruct : {n : ℕ} -> {ts : Vec Ty n} -> HList IsVTy ts -> IsVTy (Struct ts)
+  IsNamed  : (name : String) -> {ty : Ty} -> IsVTy ty -> IsVTy (Named name ty)
 
 data VTy where
   MkVTy : (ty : Ty) -> IsVTy ty -> VTy
 
-isVTy′ : Ty -> Maybe IsVTy
+private
+
+  open import Data.Maybe.Effectful renaming ( applicative to maybeApplicative )
+
+  pure  = RawApplicative.pure  maybeApplicative
+  _<*>_ = RawApplicative._<*>_ maybeApplicative
+
+{-# TERMINATING #-}
+isVTy′ : (ty : Ty) -> Maybe (IsVTy ty)
+isVTy′ = go where
+  go : (ty : Ty) -> Maybe (IsVTy ty)
+  go Bit             = just IsBit  
+  go U64             = just IsU64   
+  go (Struct ts)     = (| IsStruct (Meta.HList.traverseTyVec maybeApplicative go ts) |) 
+  go (Named name ty) = (| (IsNamed name) (go ty) |)
+  go _                = nothing
 
 {-# NON_COVERING #-}
 isVTy : Ty -> Maybe VTy
 isVTy ty with isVTy′ ty
-... | just prf = MkVTy ty prf
+... | just prf = just (MkVTy ty prf)
+... | nothing  = nothing
 
 vtyToTy : VTy -> Ty
 vtyToTy (MkVTy ty prf) = ty
-
-
--}
 
 ----------------------------------------
 
@@ -110,31 +111,12 @@ U128 = Pair U64 U64     -- currently the convention is (hi , lo) but maybe that 
 
 --------------------------------------------------------------------------------
 
-{-# TERMINATING #-}
-vtyToTy : VTy -> Ty
-vtyToTy = go where
-  go : VTy -> Ty
-  go Unit′   = Unit
-  go Token′  = Token
-  go Bit′    = Bit
-  go U64′    = U64
-  go Nat′    = Nat
-  go (Struct′ ts ) = Struct (Data.Vec.map go ts)
-  go (Named′  n t) = Named n (go t)
-
-{-# TERMINATING #-}
+{-# NON_COVERING #-}
 unsafeTyToVTy : Ty -> VTy
-unsafeTyToVTy = go where
-  {-# NON_COVERING #-}
-  go : Ty -> VTy
-  go Unit   = Unit′
-  go Token  = Token′
-  go Bit    = Bit′
-  go U64    = U64′
-  go Nat    = Nat′
-  go (Struct ts ) = Struct′ (Data.Vec.map go ts)
-  go (Named  n t) = Named′ n (go t)
+unsafeTyToVTy ty with isVTy ty
+... | just vty = vty
 
+{-
 Pair′ : VTy -> VTy -> VTy
 Pair′ s t = Struct′ (s ∷ t ∷ [])
 
@@ -143,6 +125,7 @@ Vect′ n t = Struct′ (Data.Vec.replicate n t)
 
 U128′ : VTy
 U128′ = Pair′ U64′ U64′     -- currently the convention is (hi , lo) but maybe that should be changed???
+-}
 
 --------------------------------------------------------------------------------
 
@@ -188,19 +171,11 @@ tyEq = go where
 
   go Token Token = STrue refl
 
-{-
-  go (Array n s) (Array m t) with natEq n m
-  go (Array n s) (Array m t) | SFalse = SFalse
-  go (Array n s) (Array m t) | (STrue refl) with go s t 
-  go (Array n s) (Array m t) | (STrue refl) | SFalse     = SFalse
-  go (Array n s) (Array m t) | (STrue refl) | STrue refl = STrue refl
--}
-
   go (Named n s) (Named m t) with strEq n m
-  go (Named n s) (Named m t) | SFalse = SFalse
-  go (Named n s) (Named m t) | (STrue refl) with go s t
-  go (Named n s) (Named m t) | (STrue refl) | SFalse     = SFalse
-  go (Named n s) (Named m t) | (STrue refl) | STrue refl = STrue refl
+  ... | SFalse = SFalse
+  ... | (STrue refl) with go s t
+  ...                 | SFalse     = SFalse
+  ...                 | STrue refl = STrue refl
   
   go (s₁ ⇒ s₂) (t₁ ⇒ t₂) with go s₁ t₁
   go (s₁ ⇒ s₂) (t₁ ⇒ t₂) | SFalse = SFalse

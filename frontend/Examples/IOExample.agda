@@ -89,7 +89,7 @@ module MyMain where
     mreturn x = MkMIO (return x)
 
   mget : {ty : Ty} -> String -> MIO ty
-  mget name = MkMIO (get name)
+  mget {ty} name = MkMIO (get name ty)
 
   mput : String -> Tm ty -> MIO Unit
   mput name what = MkMIO (put name what)
@@ -100,6 +100,18 @@ module MyMain where
   test0 = runMIO do
     x <- mget "x"
     mput "out" (addU64 x (kstU64′ 101))
+
+  testA : Tm (IO U64)
+  testA = runMIO do
+    mput "foo" (kstU64′ 666)
+    mput "bar" (kstU64′ 777)
+    mreturn (kstU64′ 555)
+
+  test0b : Tm (IO Unit)
+  test0b = Let testA \action -> runMIO do
+    x <- mget "x"
+    y <- MkMIO (action)
+    mput "out" (addU64 x y)
 
   test1 : Tm (IO Unit)
   test1 = runMIO do
@@ -112,6 +124,9 @@ module MyMain where
 
 exIO0 : Tm (IO Unit)
 exIO0 = MyMain.test0
+
+exIO0b : Tm (IO Unit)
+exIO0b = MyMain.test0b
 
 exIO1 : Tm (IO Unit)
 exIO1 = MyMain.test1

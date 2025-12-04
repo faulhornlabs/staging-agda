@@ -40,7 +40,7 @@ data Tm : (ty : Ty) -> Set where
   App : Tm (s ⇒ t) -> Tm s -> Tm t
   Fix : Tm ((s ⇒ t) ⇒ (s ⇒ t)) -> Tm (s ⇒ t)
   Pri : PrimOp Tm t -> Tm t
-  Lit : {t′ : VTy} -> {eq : vtyToTy t′ ≡ t} -> Val′ t′ -> Tm t
+  Lit : Literal t -> Tm t
   Var : (s : Ty) -> (l : ℕ) -> Tm s        -- this is only for conversion to first order syntax
   Log : String -> Tm t -> Tm t             -- this is a hack to be able give names to subexpressions
   Dbg : String -> Tm s -> Tm t -> Tm t     -- printf debugging hack
