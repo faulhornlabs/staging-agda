@@ -16,9 +16,9 @@ import AST.Ty
 import AST.Val
 import AST.PrimOp
 
-import Run.Monad
 import Run.Input
 import Run.Semantics
+import Run.IO
 
 import Aux.Misc
 
@@ -28,57 +28,39 @@ data Prim a
   = MkPrim RawPrim [a]
   deriving (Eq,Show)
 
--- we keep the old pure version, but it doesn't support input/output
-evalPrimOpPure :: Prim Val -> Val
-evalPrimOpPure primArgs = case primArgs of
-
-  MkPrim (MkRawPrim prim   ) args          -> evalNormalPrim (prim, args)
-  MkPrim (RawProj   j      ) [StructV xs]  -> xs !! j
-  MkPrim (RawWrap   name   ) [x]           -> WrapV name x
-{-
-  MkPrim (RawInput  name ty) []            -> error "evalPrimOp: input"
-  MkPrim (RawOutput name   ) [x]           -> error "evalPrimOp: output"
--}
-
-  _ -> error "evalPrimOp: invalid combination"
-
---------------------
-
-evalPrimOpMonadic :: EvalMonad m => Prim (Val' m) -> m (Val' m)
+evalPrimOpMonadic :: Prim Val -> IO Val
 evalPrimOpMonadic primArgs = case primArgs of
 
-  MkPrim (MkRawPrim prim   ) args          -> return $ evalNormalPrim (prim, args)
-  MkPrim (RawProj   j      ) [StructV xs]  -> return $ xs !! j
-  MkPrim (RawWrap   name   ) [x]           -> return $ WrapV name x
+  MkPrim (MkRawPrimIO pio    ) args          -> evalPrimIO pio args
+  MkPrim (MkRawPrim   prim   ) args          -> return $ evalNormalPrim (prim, args)
+  MkPrim (RawProj     j      ) [StructV xs]  -> return $ xs !! j
+  MkPrim (RawWrap     name   ) [x]           -> return $ WrapV name x
 
-{-
-  MkPrim (RawInput  name ty) []  -> do
-    inputs <- _inputs <$> get
-    case Map.lookup name inputs of
-      Nothing  -> error $ "evalPrimOp/Input: name `" ++ name ++ "` not found in inputs"
-      Just y   -> case marshalInto ty y of
-        Nothing  -> error $ "evalPrimOp/Input: cannot marshal input `" ++ name ++ "` into type " ++ show ty
-        Just val -> return val
+--  _ -> error $ "evalPrimOp: invalid combination\n  " ++ show primArgs
 
-  MkPrim (RawOutput name) [x] -> do
-    case marshalFrom x of
-      Nothing  -> error $ "evalPrimOp/Output: value for name `" ++ name ++ "` cannot be marshalled into an integer"
-      Just int -> do
-        old <- get
-        let outputs' = Map.insert name int (_outputs old)
-        let new = old { _outputs = outputs' }
-        put new
-        return TtV
--}
+--------------------------------------------------------------------------------
 
-  _ -> error "evalPrimOp: invalid combination"
+evalGet :: String -> Ty -> IO Val
+evalGet name ty = do
+  x <- getInputIO_ name
+  case marshalInto ty x of
+    Nothing -> fail $ "cannot marshal input `" ++ name ++ "` from an integer"
+    Just y  -> return y
+
+evalPut :: String -> Val -> IO Val
+evalPut name what = do
+  case marshalFrom what of
+    Nothing -> fail $ "cannot marshal output `" ++ name ++ "` into an integer"
+    Just i  -> do
+      putStrLn $ name ++ " == " ++ show i
+      return TtV
 
 --------------------------------------------------------------------------------
 
 -- just sugar for nicer patterns below
 pattern name :@@ args = (name, args)
 
-evalNormalPrim :: (String , [Val' m]) -> Val' m
+evalNormalPrim :: (String , [Val]) -> Val
 evalNormalPrim primArgs = 
 
   case primArgs of
@@ -113,14 +95,14 @@ evalNormalPrim primArgs =
     "NatMul"        :@@ [ NatV x , NatV y ]             -> NatV (x * y)
     "NatSubTrunc"   :@@ [ NatV x , NatV y ]             -> NatV (max 0 (x - y))
 
-    _ -> error $ "evalNormalPrim: either unimplement or invalid: `" ++ show (fst primArgs) ++ "`"
+    _ -> error $ "evalNormalPrim: either unimplement or invalid: `" ++ show (fst primArgs) ++ "`  \n" ++ show primArgs
 
   where 
 
-    pairBitU64 :: (Bit, Word64) -> Val' m
+    pairBitU64 :: (Bit, Word64) -> Val
     pairBitU64 (bit,word) = PairV (BitV bit) (U64V word)
 
-    pairU64U64 :: (Word64, Word64) -> Val' m
+    pairU64U64 :: (Word64, Word64) -> Val
     pairU64U64 (w1,w2) = PairV (U64V w1) (U64V w2)
 
 --------------------------------------------------------------------------------

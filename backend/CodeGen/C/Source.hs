@@ -148,7 +148,7 @@ addProgram (MkProgram fundefs mainANF) = do
   mapM addFunDef fundefs
   let mainTy    = typeOfANFE mainANF 
   let mainFunTy = MkFunTy [] mainTy
-  let preMain   = MkFunDef 0 "program" mainFunTy mainANF False
+  let preMain   = MkFunDef 0 "program" mainFunTy mainANF False 
   addFunDef preMain
   addLine sep
   addMain $ typeOfANFE mainANF
@@ -228,7 +228,7 @@ addANFWithReturn level anf = do
   addLine ret
   
 addFunDef :: FunDef ANFE -> CG ()
-addFunDef (MkFunDef idx name funTy@(MkFunTy argTys retTy) body _) = do
+addFunDef (MkFunDef idx name funTy@(MkFunTy argTys retTy) body _isFix) = do
   cretTy <- fetchTyName retTy
   let arity = length argTys
   args <- forM (zip [0..] argTys) $ \(i,ty) -> do
@@ -362,7 +362,7 @@ calculateTyMapping (MkProgram tops main) =
       workerANF main
 
     workerFunDef :: FunDef ANFE -> State TyState ()
-    workerFunDef (MkFunDef idx name (MkFunTy argsTy retTy) body _) = do
+    workerFunDef (MkFunDef idx name (MkFunTy argsTy retTy) body _isFix) = do
       mapM_ workerTy argsTy
       workerTy retTy 
       workerANF body

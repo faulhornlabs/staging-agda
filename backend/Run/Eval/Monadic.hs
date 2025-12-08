@@ -18,12 +18,12 @@ import Control.Monad.State.Strict
 import AST.Ty
 import AST.Val
 import AST.PrimOp
+import AST.IO
 import AST.Term
 
 import CodeGen.Lifting
 import CodeGen.ANF
 
-import Run.Monad
 import Run.Input
 import Run.Prim
 
@@ -31,37 +31,41 @@ import Aux.Misc
 
 --------------------------------------------------------------------------------
 
-runWithInputs :: (a -> EvalM b) -> Inputs -> a -> (Outputs, b)
-runWithInputs action inputs x = 
-  case runState (action x) iniState of
-    (result, outState) -> (_outputs outState , result)
-  where
-    iniState = emptyEvalState { _inputs = inputs }
+eval :: Raw -> IO Val
+eval orig = do
+  let ty = inferTy_ orig 
+  case ty of
+    Arrow Token pair -> do
+      putStrLn "eval: input is IO action"
+      let rwt_in = Lit (TokenV 0)
+      out <- eval' (App orig rwt_in)
+      case out of 
+        PairV result (TokenV _) -> return result
+        _ -> fail "eval/IO: expecting a (result,Token) pair"
+    _ -> do
+      putStrLn "eval: input is pure"
+      eval' orig
 
-evalWithInputs :: Inputs -> Raw -> (Outputs, ValM)
-evalWithInputs = runWithInputs evalM
-
-evalM :: EvalMonad m => Raw -> m (Val' m)
-evalM = evalInEnvM Seq.empty emptyEnv
-
-evalIO :: Raw -> IO ValIO
-evalIO = evalM
+eval' :: Raw -> IO Val
+eval' = evalInEnv Seq.empty emptyEnv
 
 --------------------------------------------------------------------------------
 
-pattern Fun f = FunV (MkFun f)
+debugPutStrLn :: String -> IO ()
+debugPutStrLn = putStrLn
 
-evalInEnvM :: forall m. EvalMonad m => Seq (FunDef Raw) -> Env' m -> Raw -> m (Val' m)
-evalInEnvM topEnv = go where
+debugPrint :: Show a => String -> a -> IO ()
+debugPrint name x = debugPutStrLn $ ">>> " ++ name ++ " = " ++ show x
 
-  go ::  Env' m -> Raw -> m (Val' m)
+--------------------------------------------------------------------------------
+
+pattern Fun f = FunV (MkRunTimeFun f)
+
+evalInEnv :: Seq (FunDef Raw) -> Env -> Raw -> IO Val
+evalInEnv topEnv = go where
+
+  go ::  Env -> Raw -> IO Val
   go env term = case term of
-
-    Lam _ty body -> return $ Fun (\x -> go (env |> x) body)
-
-    Let _ty rhs body -> do
-      rhs' <- go env rhs
-      go (env |> rhs') body
 
     App fun arg -> do
       fun' <- go env fun
@@ -69,17 +73,30 @@ evalInEnvM topEnv = go where
         Fun f -> f =<< (go env arg)
         _     -> error "evalInEnvM: application to a non-lambda"
 
+    Lam _ty body -> return $ Fun (\x -> go (env |> x) body)
+
+    Let _ty rhs body -> do
+      rhs' <- go env rhs
+      go (env |> rhs') body
+
+    -- ????
+    Rec _ty rhs body -> do
+      rhs' <- mfix (\rec -> go (env |> rec) rhs)
+      go (env |> rhs') body
+
+{-
     Fix fun -> do
       fun' <- go env fun
       case fun' of
         Fun f -> mfix f -- evalFixM f
         _     -> error "evalInEnvM: fixpoint of a non-lambda"
+-}
 
     Pri op args  -> do
       ys <- mapM (go env) args 
       evalPrimOpMonadic (MkPrim op ys)
 
-    Lit val -> return (castVal val)
+    Lit val -> return val
 
     Var j -> return (Seq.index env j)
 
@@ -92,19 +109,17 @@ evalInEnvM topEnv = go where
       debugPrint name x'
       go env y
 
-{-
-evalFixM :: EvalMonad m => (Val' m -> m (Val' m)) -> m (Val' m)
-evalFixM f = mfix f
--- evalFixM f = f =<< (evalFixM f) 
--}
+--------------------------------------------------------------------------------
 
-runProgramM :: EvalMonad m => Program Raw -> m (Val' m)
-runProgramM (MkProgram tops main) = evalInEnvM tops Seq.empty main
+runProgram :: Program Raw -> IO Val
+runProgram (MkProgram tops main) = evalInEnv tops Seq.empty main
 
-runProgramWithInputs :: Inputs -> Program Raw -> (Outputs, ValM)
-runProgramWithInputs = runWithInputs runProgramM
+runProgramWithInputs :: Inputs -> Program Raw -> IO (Outputs, Val)
+runProgramWithInputs inputs prg = runWithInputs inputs $ runProgram prg
+
 
 --------------------------------------------------------------------------------
+-- *** ANF
 
 {-
 
@@ -138,23 +153,23 @@ type ANFE = ANF (Typed ExpA)
   }
 -}
 
-evalAnfInEnvM :: forall m. EvalMonad m => Seq (FunDef ANFE) -> Env' m -> ANFE -> m (Val' m)
-evalAnfInEnvM topEnv = goANF where
+evalAnfInEnv :: Seq (FunDef ANFE) -> Env -> ANFE -> IO Val
+evalAnfInEnv topEnv = goANF where
 
-  goAtom :: Env' m -> Atom -> m (Val' m)
+  goAtom :: Env -> Atom -> IO Val
   goAtom locEnv atom = case atom of
     VarA j -> return $ Seq.index locEnv j
-    KstA v -> return $ castVal v
-    TopA k -> error "evalANF: trying to evaluate top-level lambda"
+    KstA v -> return $ v
+    TopA k -> fail "evalANFInEnv: trying to evaluate top-level lambda"
 
-  goTyExp ::  Env' m -> Typed ExpA -> m (Val' m)
+  goTyExp ::  Env -> Typed ExpA -> IO Val
   goTyExp env (MkTyped ty expr) = goExp env expr
 
-  goApp :: Env' m -> FunDef ANFE -> [Val' m] -> m (Val' m)
-  goApp env (MkFunDef _idx _name funTy body _fix) args = 
+  goApp :: Env -> FunDef ANFE -> [Val] -> IO Val
+  goApp env (MkFunDef _idx _name funTy body _isFix) args = 
     goANF (Seq.fromList args) body
     
-  goExp :: Env' m -> ExpA -> m (Val' m)
+  goExp :: Env -> ExpA -> IO Val
   goExp env expr = case expr of
 
     AtmE atom -> goAtom env atom
@@ -171,24 +186,24 @@ evalAnfInEnvM topEnv = goANF where
       cond' <- goAtom env cond
       goIfte env cond' tbr fbr
 
-  goIfte :: Env' m -> Val' m -> ANFE -> ANFE -> m (Val' m)
+  goIfte :: Env -> Val -> ANFE -> ANFE -> IO Val
   goIfte env cond tbr fbr = case cond of 
     BitV True  -> goANF env tbr
     BitV False -> goANF env fbr
-    _          -> error "evalANF: IFTE: condition is not a boolean"
+    _          -> fail "evalANF: IFTE: condition is not a boolean"
     
-  goANF :: Env' m -> ANFE -> m (Val' m)
+  goANF :: Env -> ANFE -> IO Val
   goANF env0 (MkANF lets expr) = worker env0 (F.toList lets) where
     worker env []     = goTyExp env expr
     worker env (u:us) = do
       v <- goTyExp env u 
       worker (env |> v) us
 
-runANFProgramM :: EvalMonad m => Program ANFE -> m (Val' m)
-runANFProgramM (MkProgram tops main) = evalAnfInEnvM tops Seq.empty main
+runANFProgram :: Program ANFE -> IO Val
+runANFProgram (MkProgram tops main) = evalAnfInEnv tops Seq.empty main
 
-runANFProgramWithInputs :: Inputs -> Program ANFE -> (Outputs, ValM)
-runANFProgramWithInputs = runWithInputs runANFProgramM
+runANFProgramWithInputs :: Inputs -> Program ANFE -> IO (Outputs, Val)
+runANFProgramWithInputs inputs prg = runWithInputs inputs $ runANFProgram prg
 
 --------------------------------------------------------------------------------
 

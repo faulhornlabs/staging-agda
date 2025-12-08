@@ -220,11 +220,10 @@ showTyPrec = go where
     go d U64         = "U64"
     go d Nat         = "Nat"
     go d Token       = "Token"
---    go d (IO t)      = showParen (d >ᵇ appPrec) ("IO_ " ++ go appPrec₊₁ t)
     go d (Named n t) = showParen (d >ᵇ appPrec) ("Named "  ++ quoteString n ++ " " ++ go appPrec₊₁ t) 
     go d (s ⇒ t)     = showParen (d >ᵇ appPrec) ("Arrow "  ++ go appPrec₊₁ s ++ " " ++ go appPrec₊₁ t)
     go d (Struct ts) = showParen (d >ᵇ appPrec) ("Struct " ++ showVec (\t -> go 0 t) ts)
-    go d (Ptr t)     = showParen (d >ᵇ appPrec) ("Ptr " ++ go appPrec₊₁ (vtyToTy t))
+    go d (Ptr t)     = showParen (d >ᵇ appPrec) ("Ptr_ " ++ go appPrec₊₁ (vtyToTy t))
 
 showTy : Ty -> String
 showTy = showTyPrec 0

@@ -5,17 +5,15 @@ module AST.PrimOp where
 --------------------------------------------------------------------------------
 
 import AST.Ty
+import AST.IO
 
 --------------------------------------------------------------------------------
 
 data RawPrim where
-  MkRawPrim :: String       -> RawPrim
-  RawProj   :: Int          -> RawPrim
-  RawWrap   :: String       -> RawPrim
-{-
-  RawInput  :: String -> Ty -> RawPrim
-  RawOutput :: String       -> RawPrim
--}
+  MkRawPrim   :: String       -> RawPrim
+  MkRawPrimIO :: RawPrimIO    -> RawPrim
+  RawProj     :: Int          -> RawPrim
+  RawWrap     :: String       -> RawPrim
 
 deriving instance Eq   RawPrim
 deriving instance Show RawPrim
@@ -26,7 +24,9 @@ deriving instance Read RawPrim
 primOpTy :: RawPrim -> [Ty] -> Ty
 primOpTy rawprim args = case rawprim of
 
-  MkRawPrim name  -> simplePrimOpTy name args
+  MkRawPrim   name   -> simplePrimOpTy name args
+
+  MkRawPrimIO primio -> rawPrimIOTy primio args
 
   RawProj j -> case args of
     [Struct ts] -> ts !! j
@@ -36,10 +36,6 @@ primOpTy rawprim args = case rawprim of
     [ty] -> Named name ty
     _    -> error "primOpTy: wrapping applied to more than 1 arguments"
 
-{-
-  RawInput  _ ty  -> ty
-  RawOutput _     -> Unit
--}
 
 --------------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 
-{-# LANGUAGE ScopedTypeVariables, GADTSyntax, StandaloneDeriving, PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables, StrictData, GADTSyntax, StandaloneDeriving, PatternSynonyms #-}
 module AST.Ty where
 
 --------------------------------------------------------------------------------
@@ -9,16 +9,34 @@ import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
 
+{-
+-- value types
+data VTy : Set where
+  Unit_   :: VTy
+  Token_  :: VTy
+  Bit_    :: VTy
+  U64_    :: VTy
+  Nat_    :: VTy
+  Struct_ :: [VTy] -> VTy
+  Named_  :: String -> VTy -> VTy
+
+deriving instance Eq   VTy
+deriving instance Ord  VTy
+deriving instance Show VTy
+deriving instance Read VTy
+-}
+
+-- all types
 data Ty where
-  Unit   :: Ty
-  Arrow  :: Ty -> Ty -> Ty
-  IO_    :: Ty
-  Bit    :: Ty
-  U64    :: Ty
-  Nat    :: Ty
-  Struct :: [Ty] -> Ty
-  Named  :: String -> Ty -> Ty
-  -- Array  :: Ty -> Ty                   -- ??? we would need a length or something
+  Unit    :: Ty
+  Arrow   :: Ty -> Ty -> Ty
+  Bit     :: Ty
+  U64     :: Ty
+  Nat     :: Ty
+  Struct  :: [Ty] -> Ty
+  Named   :: String -> Ty -> Ty
+  Token   :: Ty                           -- used after translating IO to token passing?
+  Ptr_    :: Ty -> Ty
 
 deriving instance Eq   Ty
 deriving instance Ord  Ty
@@ -31,6 +49,9 @@ infixr 1 ~>
 (~>) :: Ty -> Ty -> Ty
 (~>) = Arrow
 
+io_ :: Ty -> Ty
+io_ ty = Token ~> Pair ty Token
+
 isArrowTy :: Ty -> Bool
 isArrowTy (Arrow _ _) = True
 isArrowTy _           = False
@@ -42,6 +63,16 @@ isAtomicBuiltInTy ty = case ty of
   U64  -> True
   Nat  -> True
   _    -> False
+
+{-
+isIOTy_ :: Ty -> Bool
+isIOTy_ (IO_ t) = True
+isIOTy_ _       = False
+
+isIOTy :: Ty -> Maybe Ty
+isIOTy (IO_ t) = Just t
+isIOTy _       = Nothing
+-}
 
 --------------------------------------------------------------------------------
 

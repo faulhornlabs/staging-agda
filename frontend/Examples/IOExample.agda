@@ -110,6 +110,7 @@ module MyMain where
   test0b : Tm (IO Unit)
   test0b = Let testA \action -> runMIO do
     x <- mget "x"
+    mput "x_was" x
     y <- MkMIO (action)
     mput "out" (addU64 x y)
 

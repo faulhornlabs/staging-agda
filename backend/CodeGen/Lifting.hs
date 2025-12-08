@@ -18,6 +18,7 @@ import qualified Data.Foldable as F
 import AST.Ty
 import AST.Val
 import AST.PrimOp
+import AST.IO
 import AST.Term
 
 import Aux.Misc
@@ -63,7 +64,7 @@ data Program a = MkProgram
   deriving (Eq,Show)
 
 printFunDefWith :: (a -> String) -> FunDef a -> IO ()
-printFunDefWith userShow (MkFunDef idx name (MkFunTy argsTy retTy) body _) = do
+printFunDefWith userShow (MkFunDef idx name (MkFunTy argsTy retTy) body _isFix) = do
   putStrLn $ "\n" ++ show idx ++ ": def " ++ show name
   putStrLn $ " :: " ++ show argsTy ++ " -> " ++ show retTy
   putStrLn $ " = "
@@ -89,6 +90,7 @@ type TopLev = Int
 -- | Compute the set of variables referring "outside" of the giving level
 outsideVariables :: Level -> Raw -> Set Level
 outsideVariables level0 input = execState (go input) Set.empty where
+
   go term = case term of
 
     Var j -> do
@@ -97,25 +99,14 @@ outsideVariables level0 input = execState (go input) Set.empty where
 
     Lam t body     -> go body
     Let t rhs body -> go rhs >> go body
+    Rec t rhs body -> go rhs >> go body
     App fun arg    -> go fun >> go arg
-    Fix rec        -> go rec
     Pri op args    -> mapM_ go args
     Lit val        -> return ()
     Log name body  -> go body
     Dbg name t x y -> go x >> go y
 
 --------------------------------------------------------------------------------
-
-{-
-data Raw where
-  Lam :: Ty -> Raw -> Raw
-  Let :: Ty -> Raw -> Raw -> Raw
-  App :: Raw -> Raw -> Raw
-  Fix :: Raw -> Raw
-  Pri :: RawPrim -> [Raw] -> Raw
-  Lit :: Val -> Raw
-  Var :: Int -> Raw
--}
 
 -- we have to deal with functions in the context differently
 data CtxEntry 
@@ -193,15 +184,10 @@ lambdaLifting raw =
  
   where    
 
-    goFix :: Maybe String -> Level -> Context -> Raw -> M Raw
-    goFix = goFun' True
-
     goFun :: Maybe String -> Level -> Context -> Raw -> M Raw
-    goFun = goFun' False
-
-    goFun' :: Bool -> Maybe String -> Level -> Context -> Raw -> M Raw
-    goFun' !isFix !mbName !level !ctx !term = case term of
-      Lam {} -> case isLambda term of
+    goFun !mbName !level !ctx !term = {- case term of
+      Lam {} -> -}
+      case isLambda term of
         Just lambda@(MkLambda origArgTys body) -> do
           let origArity = length origArgTys
           let freeSet0  = outsideVariables level body
@@ -231,7 +217,7 @@ lambdaLifting raw =
            debug "freeTys" freeTys $
            debug "origArgTys" origArgTys $
            debug "localCtx" localCtx $
-           debug "isfix" isFix $
+           -- debug "isfix" isFix $
            debug "retTy"  retTy  $ return ()
 
           body'' <- go fullArity localCtx body
@@ -240,7 +226,7 @@ lambdaLifting raw =
            debug "body''" body'' $ 
             return ()
 
-          case isFix of
+          case False of -- isFix of
 
             False -> do
               let this = MkFunDef 
@@ -248,13 +234,13 @@ lambdaLifting raw =
                     , _funName = case mbName of { Just n -> n ++ show topCnt ; Nothing -> "_fun" ++ show topCnt }
                     , _funType = MkFunTy (map entryTy fullArgTys) retTy
                     , _funBody = body''
-                    , _funFix  = isFix
+                    , _funFix  = False  -- ???
                     }
                   thisTy = fromFunTy (_funType this)
               debugln "ty" thisTy $ 
                debug "def" this $ 
                 put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
-
+{-
             True -> do
               let recTy = MkFunTy (map entryTy fullArgTys) retTy
               let typ   = fromFunTy recTy
@@ -275,16 +261,18 @@ lambdaLifting raw =
                           , _funType = thisFunTy
                           , _funBody = body'''
                           , _funFix  = isFix
+                          , _funIO   = if isIO then error "lambdaLifting: we don't allow mixing Fix and IO" else False
                           }
                     debugln "recty" thisTy $ 
                      debug "recdef" this $ 
                       put $ MkS (topCtx |> thisTy) (topFuns |> this) (topCnt+1)
   
                 _ -> error "lambdaLifting: fixpoint applied to a non-lambda"
+-}
 
           return (addApps (Top topCnt) (map Var freeIdxs))
         _ -> error "lambdaLifting/goFun: fatal: this should not happen"
-      _ -> error "lambdaLifting/goFun: expecting a Lambda"
+     --  _ -> error $ "lambdaLifting/goFun: expecting a lambda\n" ++ show term
 
     go :: Level -> Context -> Raw -> M Raw
     go !level !ctx !term = case term of
@@ -307,7 +295,7 @@ lambdaLifting raw =
         fun' <- go level ctx fun
         arg' <- go level ctx arg
         return (App fun' arg')
-
+ 
       Let t rhs body -> do
         rhs'  <- go level ctx  rhs
         let entry = case rhs' of
@@ -316,11 +304,18 @@ lambdaLifting raw =
         body' <- go (level+1) (ctx |> entry) body
         return (Let t rhs' body')
 
-      -- Fix rec -> Fix <$> go level ctx rec
-      Fix rec -> case rec of
-        Lam {}                 -> goFix Nothing     level ctx rec
-        Log name what@(Lam {}) -> goFix (Just name) level ctx what
-        _                      -> error "lambdaLifting: Fix applied to a non-lambda"
+      Rec t rhs body -> do
+        k1 <- _counter <$> get 
+        let candidate = TopEntry t k1
+        rhs'  <- go (level+1) (ctx |> candidate)  rhs
+        let entry = case rhs' of
+              Top k -> TopEntry  t k
+              _     -> SomeEntry t
+        if candidate /= entry 
+          then error $ "lambdaLifting: fatal error in `letRec`: " ++ show candidate ++ " vs. " ++ show entry
+          else do
+            body' <- go (level+1) (ctx |> entry) body
+            return (Rec t rhs' body')
 
       Log name body -> Log name <$> go level ctx body
       

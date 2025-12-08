@@ -39,7 +39,9 @@ import Big.Limbs
 -- main = main_baby_modInv
 -- main = main_montDiv
 -- main = main_recAdd
-main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
+-- main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
+
+main = runCommon "examples/ex_io.ast" $ \_ -> return ()
 
 main_binary = do
   runCommon "examples/ex_binary.ast" $ \_ -> return ()
@@ -189,9 +191,10 @@ runCommon' printAstFlag fname kont = do
         putStrLn "---------------------------"
         print ast
 
-      let res = eval ast
-      -- resIO <- evalIO ast
-      -- let res = castVal resIO :: Val
+      putStrLn "---------------------------"
+      putStrLn $ "program type = " ++ show (inferTy_ ast)
+
+      res <- eval ast
 
       putStrLn $ "\neval result = " ++ show res
 
@@ -216,12 +219,12 @@ runCommon' printAstFlag fname kont = do
   
       writeFile "examples/out.c" csource
 
-      putStrLn "---------------------------"
-      putStrLn $ "program type = " ++ show (inferTy_ ast)
+      res'  <- runProgram program
+      res'' <- runANFProgram anf
 
       putStrLn $ "\nresult of the original term     = " ++ show res
-      putStrLn $ "\nresult of lambda lifted program = " ++ show (runProgram program)
-      putStrLn $ "\nresult of ANF converted program = " ++ show (runANFProgram anf)
+      putStrLn $ "\nresult of lambda lifted program = " ++ show res' 
+      putStrLn $ "\nresult of ANF converted program = " ++ show res''
       putStrLn " "
       kont res
 
@@ -271,9 +274,9 @@ debugAnfConversion' term = do
       putStrLn $ "ANF converted program:"
       printANFProgram anf
 
-      let res1 = eval term
-      let res2 = runProgram prg
-      let res3 = runANFProgram anf
+      res1 <- eval term
+      res2 <- runProgram prg
+      res3 <- runANFProgram anf
       putStrLn $ "result of original      = " ++ show res1
       putStrLn $ "result of lambda-lifted = " ++ show res2
       putStrLn $ "result of anf converted = " ++ show res3
@@ -283,8 +286,8 @@ findAnfCounterExample target = do
   term <- randomTermU64 target
   let prg  = lambdaLifting term
   let anf  = programToANF prg
-  let res2 = runProgram prg
-  let res3 = runANFProgram anf
+  res2 <- runProgram prg
+  res3 <- runANFProgram anf
   if (res2 /= res3) 
     then return term
     else findAnfCounterExample target
@@ -298,8 +301,8 @@ testLambdaLifting1 target = do
     then error "testLambdaLifting1: type inference doesn't match expectations"
     else do
       let prg  = lambdaLifting term
-      let res1 = eval term
-      let res2 = runProgram prg
+      res1 <- eval term
+      res2 <- runProgram prg
       return (res1 == res2)
   
 testAnfConversion1 :: Size -> IO Bool
@@ -310,9 +313,9 @@ testAnfConversion1 target = do
     else do
       let prg  = lambdaLifting term
       let anf  = programToANF prg
-      let res1 = eval term
-      let res2 = runProgram prg
-      let res3 = runANFProgram anf
+      res1 <- eval term
+      res2 <- runProgram prg
+      res3 <- runANFProgram anf
       return (res2 == res3)
 
 testLambdaLiftingN :: Int -> Size -> IO Bool

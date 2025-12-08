@@ -177,11 +177,6 @@ data RawPrim : Set where
   MkRawPrimIO : RawPrimIO  -> RawPrim
   RawProj     : ℕ          -> RawPrim
   RawWrap     : String     -> RawPrim
-{-
-  -- the old-style IO hack; it's replaced now 
-  RawInput  : String -> Ty -> RawPrim
-  RawOutput : String -> RawPrim
--}
 
 showRawPrimPrec : ℕ -> RawPrim -> String
 showRawPrimPrec = go where
@@ -190,10 +185,6 @@ showRawPrimPrec = go where
   go d (MkRawPrimIO pio)  = showParen (d >ᵇ appPrec) ("MkRawPrimIO " ++ showRawPrimIOPrec appPrec₊₁ pio)
   go d (RawProj     j)    = showParen (d >ᵇ appPrec) ("RawProj "     ++ showNat j)
   go d (RawWrap     n)    = showParen (d >ᵇ appPrec) ("RawWrap "     ++ showString n)
-{-
-  go d (RawInput  n t)  = showParen (d >ᵇ appPrec) ("RawInput "  ++ showString n ++ " " ++ showTyPrec appPrec₊₁ t)
-  go d (RawOutput n  )  = showParen (d >ᵇ appPrec) ("RawOutput " ++ showString n)
--}
 
 primOpForget : {tm : Ty -> Set} -> {A : Set} -> {t : Ty} -> ({t : Ty} -> tm t -> A) -> PrimOp tm t -> RawPrim × List A
 primOpForget {tm} {A} f = go where
@@ -234,6 +225,6 @@ primOpForget {tm} {A} f = go where
   go (Input  n t)        = RawInput  n t             , []
   go (Output n y)        = RawOutput n               , (f y ∷ [])
 -}
-  go (WrapPrimIO pio rwt)  = let pair = primIOForget f pio in MkRawPrimIO (fst pair) , Data.List._++_ (snd pair)(f rwt ∷ [])
+  go (WrapPrimIO pio rwt)  = let pair = primIOForget f pio in MkRawPrimIO (fst pair) , Data.List._++_ (snd pair) (f rwt ∷ [])
   
 --------------------------------------------------------------------------------
