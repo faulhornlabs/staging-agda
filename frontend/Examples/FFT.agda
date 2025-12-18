@@ -70,7 +70,12 @@ exFFT0b = do
   print "exp(5)" (exp₂ (kstU64′ 5))
 
 exFFT1 : Tm (IO Unit)
-exFFT1 = withTmpArray {vty = U64VTy} (kstU64′ 16) \arr -> do
+exFFT1 = do
+  res <- bitReverseDebugIO (kstU64′ 8) (kstU64′ 0x65)
+  print "bitReverseIO(8,0x65)" res
+
+exFFT2 : Tm (IO Unit)
+exFFT2 = withTmpArray {vty = U64VTy} (kstU64′ 16) \arr -> do
   for arr \i -> write {eq = refl} arr i i
   perm <- bitReversalPerm arr
   print "bit-reversed" perm

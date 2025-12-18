@@ -80,7 +80,7 @@ exp₂ : Tm U64 -> Tm U64
 exp₂ = App exp₂′
 
 log₂′ : Tm (U64 ⇒ U64)
-log₂′ = Fix (\rec -> Lam \n -> ifte (isOneU64 n) zeroU64 (App rec (snd (shiftRightU64₁ n))))
+log₂′ = Fix (\rec -> Lam \n -> ifte (isOneU64 n) zeroU64 (incU64 (App rec (snd (shiftRightU64₁ n)))))
 
 log₂ : Tm U64 -> Tm U64
 log₂ = App log₂′
@@ -88,10 +88,34 @@ log₂ = App log₂′
 bitReverse : Tm U64 -> Tm U64 -> Tm U64
 bitReverse nbits input = App2 rev nbits zeroU64 where
   rev : Tm (U64 ⇒ U64 ⇒ U64)
-  rev = Fix (\rec -> Lam2 \k acc -> ifte (isZeroU64 k) acc
-              (Let (decU64 k) \k′ -> bitOrU64
-                acc
-                (shiftLeftByU64 (shiftRightByU64 input k′) (subU64 nbits k))))
+  rev = Fix \rec -> Lam2 \k acc -> 
+               Let (decU64 k) \k′ ->
+                 ifte (isZeroU64 k)
+                   acc
+                   (Let
+                     (bitOrU64
+                       acc
+                       (shiftLeftByU64 (bitAndU64 oneU64 (shiftRightByU64 input k′)) (subU64 nbits k))
+                     )
+                     \acc′ -> App2 rec k′ acc′
+                   )
+
+bitReverseDebugIO : Tm U64 -> Tm U64 -> Tm (IO U64)
+bitReverseDebugIO nbits input = App2 rev nbits zeroU64 where
+  rev : Tm (U64 ⇒ U64 ⇒ IO U64)
+  rev = Fix \rec -> Lam2 \k acc -> 
+               Let (decU64 k) \k′ ->
+                 ifte (isZeroU64 k)
+                   (pure acc)
+                   (Let
+                     (shiftLeftByU64 (bitAndU64 oneU64 (shiftRightByU64 input k′)) (subU64 nbits k))
+                     \this -> Let (bitOrU64 acc this) \acc′ -> do
+                       print "k"    k
+                       print "this" this
+                       print "acc"  acc
+                       print "acc'" acc′
+                       App2 rec k′ acc′
+                   )
 
 staticBitReverse : Log2 -> Tm U64 -> Tm U64
 staticBitReverse nbits = bitReverse (kstU64′ (fromLog2 nbits))
@@ -103,11 +127,13 @@ bitReversalPerm : Tm (Ptr vty) -> Tm (IO (Ptr vty))
 bitReversalPerm {vty = vty} inputArr = do
   N <- getArraySize inputArr
   Let (log₂ N) \n -> do
-    print "n = log(N)" n
+    -- print "n = log(N)" n
     outputArr <- allocArray vty N
     loop N \i -> do
-      x <- read {eq = refl} inputArr i
-      write {eq = refl} outputArr (bitReverse n i) x
+      Let (bitReverse n i) \j -> do
+        -- print "(i,j)" (mkPair i j)
+        x <- read {eq = refl} inputArr i
+        write {eq = refl} outputArr j x
     pure outputArr
   
 --------------------------------------------------------------------------------
