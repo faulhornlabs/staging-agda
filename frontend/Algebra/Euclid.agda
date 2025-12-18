@@ -38,7 +38,7 @@ modularBinaryEuclid prime′ x0 y0 u0 v0 = App worker (mkQuad u0 x0 v0 y0) where
   halfPrime₊₁ = add halfPrime (fromℕ 1)
 
   step : Tm (Pair Word Word ⇒ Pair Word Word)
-  step = Fix (Lam recU) where
+  step = Fix recU where
     recU : Tm (Pair Word Word ⇒ Pair Word Word) -> Tm (Pair Word Word ⇒ Pair Word Word)
     recU rec = Lam \u,x -> runGen do
       (u , x  ) <- pair⇑ u,x
@@ -62,7 +62,7 @@ modularBinaryEuclid prime′ x0 y0 u0 v0 = App worker (mkQuad u0 x0 v0 y0) where
     return z′
   
   worker : Tm (Quad ⇒ Word)
-  worker = Fix (Lam recQ) where
+  worker = Fix recQ where
     recQ : Tm (Quad ⇒ Word) -> Tm (Quad ⇒ Word)
     recQ rec = Lam \u,x,v,y -> runGen do
       (u,x , v,y) <- pair⇑ u,x,v,y

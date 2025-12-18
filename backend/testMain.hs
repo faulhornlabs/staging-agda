@@ -41,7 +41,8 @@ import Big.Limbs
 -- main = main_recAdd
 -- main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
 
-main = runCommon "examples/ex_io.ast" $ \_ -> return ()
+main = runCommon "examples/ex_fft0.ast" $ \_ -> return ()
+--main = runCommon "examples/ex_io2.ast" $ \_ -> return ()
 
 main_binary = do
   runCommon "examples/ex_binary.ast" $ \_ -> return ()

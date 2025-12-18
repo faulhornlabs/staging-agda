@@ -60,8 +60,11 @@ data PrimOp (tm : Ty -> Set) : Ty -> Set where
   BitOr         : tm U64 -> tm U64 -> PrimOp tm U64
   BitAnd        : tm U64 -> tm U64 -> PrimOp tm U64
   BitXor        : tm U64 -> tm U64 -> PrimOp tm U64
+  -- rotations and shifts
   RotLeftU64    : tm Bit -> tm U64 -> PrimOp tm (Pair Bit U64)
   RotRightU64   : tm Bit -> tm U64 -> PrimOp tm (Pair Bit U64)
+  ShiftLeftByU64  : tm U64 -> tm U64 -> PrimOp tm U64
+  ShiftRightByU64 : tm U64 -> tm U64 -> PrimOp tm U64
   -- 64-bit comparisons
   EqU64         : tm U64 -> tm U64 -> PrimOp tm Bit
   LtU64         : tm U64 -> tm U64 -> PrimOp tm Bit
@@ -134,6 +137,8 @@ traversePrim {F} {tm₁} {tm₂} applicative f what = go what where
   go (BitXor x y)        = (| BitXor (f x) (f y)             |)
   go (RotLeftU64   c x)  = (| RotLeftU64  (f c) (f x)        |)
   go (RotRightU64  c x)  = (| RotRightU64 (f c) (f x)        |)
+  go (ShiftLeftByU64  x k)  = (| ShiftLeftByU64  (f x) (f k)    |)
+  go (ShiftRightByU64 x k)  = (| ShiftRightByU64 (f x) (f k)    |)
   go (EqU64 x y)         = (| EqU64 (f x) (f y)              |)
   go (LtU64 x y)         = (| LtU64 (f x) (f y)              |)
   go (LeU64 x y)         = (| LeU64 (f x) (f y)              |)
@@ -202,6 +207,8 @@ primOpForget {tm} {A} f = go where
   go (BitXor x y)        = MkRawPrim "BitXor"        , (f x ∷ f y ∷ [])
   go (RotLeftU64   c x)  = MkRawPrim "RotLeftU64"    , (f c ∷ f x ∷ [])
   go (RotRightU64  c x)  = MkRawPrim "RotRightU64"   , (f c ∷ f x ∷ [])
+  go (ShiftLeftByU64  x k) = MkRawPrim "ShiftLeftByU64"    , (f x ∷ f k ∷ [])
+  go (ShiftRightByU64 x k) = MkRawPrim "ShiftRightByU64"   , (f x ∷ f k ∷ [])
   go (EqU64 x y)         = MkRawPrim "EqU64"         , (f x ∷ f y ∷ [])
   go (LtU64 x y)         = MkRawPrim "LtU64"         , (f x ∷ f y ∷ [])
   go (LeU64 x y)         = MkRawPrim "LeU64"         , (f x ∷ f y ∷ [])

@@ -55,8 +55,8 @@ u64AsWordAPI = record
   ; bitAnd     = bitAndU64
   ; bitXor     = bitXorU64
     -- shifts
-  ; shiftLeftBy1  = shiftLeftU64
-  ; shiftRightBy1 = shiftRightU64
+  ; shiftLeftBy1  = shiftLeftU64₁
+  ; shiftRightBy1 = shiftRightU64₁
   }
 
 --------------------------------------------------------------------------------

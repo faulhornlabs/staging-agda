@@ -29,7 +29,7 @@ import Data.Nat.Properties
 
 open import Meta.Object
 open import Meta.Show
-open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; BigIntVTy ; BigIntVTy' ; mkBigInt ; mkBigInt' ; bigproj )
+open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; mkBigInt ; mkBigInt' ; bigproj )
 open import Algebra.Limbs
 open import Algebra.U128 using ( addU64toU64 ; addU64toU128 )
 open import Algebra.Misc 

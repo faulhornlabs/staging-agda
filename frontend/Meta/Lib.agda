@@ -100,11 +100,44 @@ module IOLib where
       MkIO : PrimIO Tm ty -> Tm (Token ⇒ Pair ty Token)
       MkIO what = Lam \rwt -> Pri (WrapPrimIO what rwt)
   
-    get : String -> (ty : Ty) -> Tm (IO ty)
-    get name ty = MkIO (PrimGet name ty)
+    get′ : String -> (ty : Ty) -> Tm (IO ty)
+    get′ name ty = MkIO (PrimGet name ty)
+
+    get : {ty : Ty} -> String -> Tm (IO ty)
+    get {ty = ty} name = MkIO (PrimGet name ty)
 
     put : String -> Tm ty -> Tm (IO Unit)
     put name what = MkIO (PrimPut name what)
+
+    print : String -> Tm ty -> Tm (IO Unit)
+    print name what = MkIO (PrimPrint name what)
+
+    private variable
+      vty : VTy
+
+    Array : VTy -> Ty
+    Array = Ptr
+    
+    allocArray : (vty : VTy) -> Tm U64 -> Tm (IO (Ptr vty))
+    allocArray vty len = MkIO (PrimAlloc vty len)
+
+    free : {vty : VTy} -> Tm (Ptr vty) -> Tm (IO Unit)
+    free {vty = vty} ptr = MkIO (PrimFree ptr)
+
+    read : {eq : vtyToTy vty ≡ ty} -> Tm (Ptr vty) -> Tm U64 -> Tm (IO ty)
+    read {eq = eq} ptr i = MkIO (PrimRead {eq = eq} ptr i)
+
+    write : {eq : vtyToTy vty ≡ ty} -> Tm (Ptr vty) -> Tm U64 -> Tm ty -> Tm (IO Unit)
+    write {eq = eq} ptr i y = MkIO (PrimWrite {eq = eq} ptr i y)
+
+    getArraySize : Tm (Ptr vty) -> Tm (IO U64)
+    getArraySize ptr = MkIO (PrimLen ptr)
+    
+    loop′ : Tm U64 -> Tm (U64 ⇒ IO Unit) -> Tm (IO Unit)
+    loop′ len body = MkIO (PrimLoop len body)
+
+    loop : Tm U64 -> (Tm U64 -> Tm (IO Unit)) -> Tm (IO Unit)
+    loop len body = loop′ len (Lam body)
 
   return : Tm t -> Tm (IO t)
   return = pure
@@ -112,6 +145,57 @@ module IOLib where
   then : Tm (IO s) -> Tm (IO t) -> Tm (IO t)
   then this next = bind this (Lam \_ -> next)
 
+  private
+
+    _>>=_ : Tm (IO s) -> (Tm s -> Tm (IO t)) -> Tm (IO t)    
+    _>>=_ u h = bind u (Lam \x -> h x)
+
+    _>>_ : Tm (IO s) -> Tm (IO t) -> Tm (IO t)
+    _>>_ u v = then u v
+
+    infixl 1 _>>=_
+    infixl 1 _>>_
+
+  withTmpArray : Tm U64 -> (Tm (Ptr vty) -> Tm (IO ty)) -> Tm (IO ty)
+  withTmpArray {vty = vty} len action =
+    allocArray vty len >>= \ptr ->
+    action ptr >>= \y ->
+    free ptr >>
+    pure y
+
+{-
+  withTmpArray : Tm U64 -> (Tm (Ptr vty) -> Tm (IO ty)) -> Tm (IO ty)
+  withTmpArray {vty = vty} len action = do
+    ptr <- allocArray vty len 
+    y <- action ptr 
+    free ptr 
+    pure y
+-}
+
+  for : Tm (Ptr vty) -> (Tm U64 -> Tm (IO Unit)) -> Tm (IO Unit)
+  for ptr body = getArraySize ptr >>= \len -> loop len body
+  
+  makeArray : Tm U64 -> (Tm (Ptr vty) -> Tm U64 -> Tm (IO Unit)) -> Tm (IO (Ptr vty))
+  makeArray {vty = vty} len action =
+    allocArray vty len >>= \ptr ->
+    loop len (action ptr) >>
+    pure ptr
+
+  mapM : {vty₁ vty₂ : VTy} -> {ty₁ ty₂ : Ty} -> {eq₁ : vtyToTy vty₁ ≡ ty₁} -> {eq₂ : vtyToTy vty₂ ≡ ty₂}
+       -> Tm (Ptr vty₁) -> (Tm ty₁ -> Tm (IO ty₂)) -> Tm (IO (Ptr vty₂))
+  mapM {vty₂ = vty₂} {eq₁ = eq₁} {eq₂ = eq₂} arr₁ fun =
+    getArraySize arr₁ >>= \n -> 
+    allocArray vty₂ n >>= \arr₂ ->
+    loop n (\i ->
+      read {eq = eq₁} arr₁ i >>= \x ->
+      fun x >>= \y ->
+      write {eq = eq₂}  arr₂ i y) >>
+    pure arr₂
+
+  mapPure : {vty₁ vty₂ : VTy} -> {ty₁ ty₂ : Ty} -> {eq₁ : vtyToTy vty₁ ≡ ty₁} -> {eq₂ : vtyToTy vty₂ ≡ ty₂}
+       -> Tm (Ptr vty₁) -> (Tm ty₁ -> Tm ty₂) -> Tm (IO (Ptr vty₂))
+  mapPure {eq₁ = eq₁} {eq₂ = eq₂} arr₁ fun = mapM {eq₁ = eq₁} {eq₂ = eq₂} arr₁ (\x -> pure (fun x))
+    
 --------------------------------------------------------------------------------
 
 ifte : Tm Bit -> Tm s -> Tm s -> Tm s
@@ -242,6 +326,15 @@ module U64Lib where
   subU64 : Tm U64 -> Tm U64 -> Tm U64
   subU64 x y = Pri (SubU64 x y)
 
+  incU64 : Tm U64 -> Tm U64
+  incU64 x = addU64 x oneU64
+
+  decU64 : Tm U64 -> Tm U64
+  decU64 x = subU64 x oneU64
+
+  twiceU64 : Tm U64 -> Tm U64
+  twiceU64 x = Let x \y -> addU64 y y
+  
   mulExtU64 : Tm U64 -> Tm U64 -> Tm U128
   mulExtU64 x y = Pri (MulExtU64 x y)
 
@@ -277,11 +370,17 @@ module U64Lib where
 
   open BitLib
   
-  shiftLeftU64 : Tm U64 -> Tm (Pair Bit U64)
-  shiftLeftU64 = rotLeftU64 zeroBit
+  shiftLeftU64₁ : Tm U64 -> Tm (Pair Bit U64)
+  shiftLeftU64₁ = rotLeftU64 zeroBit
 
-  shiftRightU64 : Tm U64 -> Tm (Pair Bit U64)
-  shiftRightU64 = rotRightU64 zeroBit
+  shiftRightU64₁ : Tm U64 -> Tm (Pair Bit U64)
+  shiftRightU64₁ = rotRightU64 zeroBit
+
+  shiftLeftByU64 : Tm U64 -> Tm U64 -> Tm U64
+  shiftLeftByU64 x k = Pri (ShiftLeftByU64 x k)
+
+  shiftRightByU64 : Tm U64 -> Tm U64 -> Tm U64
+  shiftRightByU64 x k = Pri (ShiftRightByU64 x k)
 
   ----------------------------------------
 
@@ -302,6 +401,9 @@ module U64Lib where
 
   isZeroU64 : Tm U64 -> Tm Bit
   isZeroU64 x = eqU64 x zeroU64
+
+  isOneU64 : Tm U64 -> Tm Bit
+  isOneU64 x = eqU64 x oneU64
 
   _==_ : Tm U64 -> Tm U64 -> Tm Bit
   _==_ = eqU64

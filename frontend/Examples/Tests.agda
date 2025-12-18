@@ -32,8 +32,8 @@ natFixPow = go where
 
 natDynPowNaive : Tm Nat -> Tm Nat -> Tm Nat
 natDynPowNaive expo base = App (Fix powRec) expo where
-  powRec : Tm ((Nat ⇒ Nat) ⇒ (Nat ⇒ Nat))
-  powRec = Lam \rec -> Lam \e -> ifte (isZeroNat e)
+  powRec : Tm (Nat ⇒ Nat) -> Tm (Nat ⇒ Nat)
+  powRec rec = Lam \e -> ifte (isZeroNat e)
     (kstNat 1)
     (mulNat base (App rec (predNat e)))
 
@@ -125,7 +125,7 @@ recAdd x y = App f y where
   add : Tm (U64 ⇒ U64) -> Tm (U64 ⇒ U64)
   add rec = Lam \y -> ifte (isZeroU64 y) x (+₁ (App rec (-₁ y)))
   f : Tm (U64 ⇒ U64)
-  f = Fix (Lam add)
+  f = Fix add
 
 recMul : Tm U64 -> Tm U64 -> Tm U64
 recMul a b = App g b where
@@ -135,11 +135,18 @@ recMul a b = App g b where
   mul : Tm (U64 ⇒ U64) -> Tm (U64 ⇒ U64)
   mul rec = Lam \y -> ifte (isZeroU64 y) zeroU64 (+ₐ (App rec (-₁ y)))
   g : Tm (U64 ⇒ U64)
-  g = Fix (Lam mul)
+  g = Fix mul
 
 exRecAdd exRecMul : Tm U64
 exRecAdd = App2 (Lam2 recAdd) (kstU64′ 7) (kstU64′ 5)
 exRecMul = App2 (Lam2 recMul) (kstU64′ 7) (kstU64′ 5)
+
+open IOLib
+
+exRecAddMul : Tm (IO Unit)
+exRecAddMul = then 
+  (print "7 + 5" exRecAdd)
+  (print "7 * 5" exRecMul)
 
 --------------------------------------------------------------------------------
 

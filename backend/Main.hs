@@ -128,9 +128,9 @@ runCommon MkFlags{..} MkFiles{..} = do
         let (out2,res2) = runProgramWithInputs    inputs program
         let (out3,res3) = runANFProgramWithInputs inputs anf 
 
-        putStrLn $ "result of the original term     = " ++ show res1 ++ "\n"
-        putStrLn $ "result of lambda lifted program = " ++ show res2 ++ "\n"
-        putStrLn $ "result of ANF converted program = " ++ show res3 ++ "\n"
+        putStrLn $ "result of the original term     = " ++ showVal res1 ++ "\n"
+        putStrLn $ "result of lambda lifted program = " ++ showVal res2 ++ "\n"
+        putStrLn $ "result of ANF converted program = " ++ showVal res3 ++ "\n"
 
         when (flagVerbosity >= Verbose) $ do
           putStrLn "\noutputs of the original term:"         ; printOutputs out1

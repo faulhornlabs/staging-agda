@@ -64,15 +64,40 @@ isAtomicBuiltInTy ty = case ty of
   Nat  -> True
   _    -> False
 
-{-
-isIOTy_ :: Ty -> Bool
-isIOTy_ (IO_ t) = True
-isIOTy_ _       = False
+--------------------------------------------------------------------------------
 
-isIOTy :: Ty -> Maybe Ty
-isIOTy (IO_ t) = Just t
-isIOTy _       = Nothing
--}
+-- | Types which can be stored in a fixed amount of memory.
+-- These can be elements of flat arrays
+data FlatTy where
+  FlatBit     :: FlatTy
+  FlatU64     :: FlatTy
+  FlatStruct  :: [FlatTy] -> FlatTy
+  FlatNamed   :: String -> FlatTy -> FlatTy
+
+deriving instance Eq   FlatTy
+deriving instance Show FlatTy
+deriving instance Read FlatTy
+
+flatTySize :: FlatTy -> Int
+flatTySize = go where
+  go FlatBit          = 1
+  go FlatU64          = 8
+  go (FlatStruct ts ) = sum (map go ts) 
+  go (FlatNamed  _ t) = go t
+
+isFlatTy :: Ty -> Maybe FlatTy
+isFlatTy = go where
+  go Bit          = Just FlatBit
+  go U64          = Just FlatU64
+  go (Struct ts)  = FlatStruct <$> traverse go ts
+  go (Named n t)  = FlatNamed n <$> go t
+
+fromFlatTy :: FlatTy -> Ty
+fromFlatTy = go where
+  go FlatBit          = Bit
+  go FlatU64          = U64
+  go (FlatStruct ts)  = Struct (map go ts)
+  go (FlatNamed n t)  = Named n (go t)
 
 --------------------------------------------------------------------------------
 

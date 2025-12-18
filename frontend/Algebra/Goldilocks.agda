@@ -82,17 +82,13 @@ sub = with2 sub'
 
 --------------------------------------------------------------------------------
 
-postulate
-  shiftLeftByU64  : ℕ -> Tm U64 -> Tm U64
-  shiftRightByU64 : ℕ -> Tm U64 -> Tm U64
-
 private
   
   _<<<_ : Tm U64 -> ℕ -> Tm U64
-  _<<<_ x k = shiftLeftByU64 k x
+  _<<<_ x k = shiftLeftByU64 x (kstU64′ k)
 
   _>>>_ : Tm U64 -> ℕ -> Tm U64
-  _>>>_ x k = shiftRightByU64 k x
+  _>>>_ x k = shiftRightByU64 x (kstU64′ k)
 
   loMask : Tm U64
   loMask = kstU64′ 0xffffffff

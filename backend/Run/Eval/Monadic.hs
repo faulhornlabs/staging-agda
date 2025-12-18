@@ -59,13 +59,16 @@ debugPrint name x = debugPutStrLn $ ">>> " ++ name ++ " = " ++ show x
 
 --------------------------------------------------------------------------------
 
-pattern Fun f = FunV (MkRunTimeFun f)
-
 evalInEnv :: Seq (FunDef Raw) -> Env -> Raw -> IO Val
 evalInEnv topEnv = go where
 
   go ::  Env -> Raw -> IO Val
-  go env term = case term of
+  go env term = do
+    value <- go' env term 
+    forceVal value
+
+  go' ::  Env -> Raw -> IO Val
+  go' env term = case term of
 
     App fun arg -> do
       fun' <- go env fun
@@ -79,10 +82,9 @@ evalInEnv topEnv = go where
       rhs' <- go env rhs
       go (env |> rhs') body
 
-    -- ????
     Rec _ty rhs body -> do
-      rhs' <- mfix (\rec -> go (env |> rec) rhs)
-      go (env |> rhs') body
+      let f = go (env |> Thk f) rhs 
+      go (env |> Thk f) body
 
 {-
     Fix fun -> do
@@ -92,9 +94,10 @@ evalInEnv topEnv = go where
         _     -> error "evalInEnvM: fixpoint of a non-lambda"
 -}
 
-    Pri op args  -> do
-      ys <- mapM (go env) args 
-      evalPrimOpMonadic (MkPrim op ys)
+    Pri op@(MkRawPrim name) args -> case isLazyPrim name of
+      True  -> lazyPrim   env name args
+      False -> normalPrim env op   args
+    Pri op args -> normalPrim env op args
 
     Lit val -> return val
 
@@ -108,6 +111,37 @@ evalInEnv topEnv = go where
       x' <- go env x
       debugPrint name x'
       go env y
+
+  -- lazy primitives mess up stuff...
+
+  isLazyPrim :: String -> Bool
+  isLazyPrim "And"  = True
+  isLazyPrim "Or"   = True
+  isLazyPrim "IFTE" = True
+  isLazyPrim _      = False
+
+  normalPrim :: Env -> RawPrim -> [Raw] -> IO Val
+  normalPrim env op args = do
+    ys <- mapM (go env) args 
+    evalPrimOpMonadic (MkPrim op ys)
+
+  lazyPrim :: Env -> String -> [Raw] -> IO Val
+  lazyPrim env name args = case name of
+    "And"   -> lazyAnd env args
+    "Or"    -> lazyOr  env args
+    "IFTE"  -> lazyIf  env args
+
+  lazyIf env [cond,x,y] = do
+    BitV c <- go env cond
+    if c then go env x else go env y
+
+  lazyOr env [p,q] = do
+    BitV a <- go env p
+    if a then return (BitV True) else go env q
+
+  lazyAnd env [p,q] = do
+    BitV a <- go env p
+    if a then go env q else return (BitV False) 
 
 --------------------------------------------------------------------------------
 

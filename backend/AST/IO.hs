@@ -11,10 +11,13 @@ import AST.Ty
 data RawPrimIO where
   RawPrimGet    :: String -> Ty  -> RawPrimIO     -- input name and type
   RawPrimPut    :: String        -> RawPrimIO     -- output name (type is implicit)
-  RawPrimAlloc  :: Ty            -> RawPrimIO     -- type of the array what we allocate
-  RawPrimRead   :: Ty            -> RawPrimIO     -- type of the element we read
+  RawPrimPrint  :: String        -> RawPrimIO     -- output descriptor (type is implicit)
+  RawPrimAlloc  :: Ty            -> RawPrimIO     -- type of the elements of the array what we allocate
   RawPrimFree   ::                  RawPrimIO
-  RawPrimWrite  ::                  RawPrimIO
+  RawPrimRead   :: Ty            -> RawPrimIO     -- type of the element we read
+  RawPrimWrite  :: Ty            -> RawPrimIO     -- type of the element we write
+  RawPrimLen    ::                  RawPrimIO
+  RawPrimLoop   ::                  RawPrimIO
 
 deriving instance Eq   RawPrimIO
 deriving instance Show RawPrimIO
@@ -49,12 +52,17 @@ rawPrimIOTy  prim args = case args of
 
     RawPrimGet    name ty -> io__ ty
     RawPrimPut    name    -> io__ Unit
-  
+    RawPrimPrint  name    -> io__ Unit
+
     RawPrimAlloc  ty      -> io__ (Ptr_ ty)
-    RawPrimRead   ty      -> io__ ty
-  
     RawPrimFree           -> io__ Unit
-    RawPrimWrite          -> io__ Unit
+  
+    RawPrimRead   ty      -> io__ ty
+    RawPrimWrite  ty      -> io__ Unit
+
+    RawPrimLen            -> io__ U64
+    RawPrimLoop           -> io__ Unit
+
 
   where
 

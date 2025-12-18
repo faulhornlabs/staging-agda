@@ -103,18 +103,6 @@ penultimateVar {n = n} {ctx = ctx} {s = s} {t = t} = Var (inject₁ (Data.Fin.fr
 
 --------------------------------------------------------------------------------
 
--- fix unfix   ~>   letrec f = App unfix f in f
-fixToLetRec : {n : ℕ} -> {ctx : Ctx n} -> {u : Ty} -> LC ctx (u ⇒ u) -> LC ctx u
-fixToLetRec {n = n} {ctx = ctx} {u = u} unfix = Rec def body where
-
-  def  : LC (u ∷ ctx) u
-  def  = App (inExtendedCtx u unfix) lastVar
-
-  body : LC (u ∷ ctx) u
-  body = lastVar 
-
---------------------------------------------------------------------------------
-
 private
 
   variable
@@ -143,6 +131,8 @@ private
     This′  : u ≡ ty            -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
     Left′  : VarPrf n₁ ctx₁ ty -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
     Right′ : VarPrf n₂ ctx₂ ty -> VarWhere n₁ n₂ ctx₁ ctx₂ u ty
+
+--------------------------------------------------------------------------------
 
 {-
   findWhere′ : {n₁ n₂ : ℕ} -> (ctx₁ : Ctx n₁) (ctx₂ : Ctx n₂) -> (u ty : Ty)

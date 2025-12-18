@@ -24,7 +24,7 @@ open import Relation.Binary.PropositionalEquality
 
 open import Meta.Object
 
-open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' ; BigIntVTy ; BigIntVTy' )
+open import Algebra.BigInt as BigInt using ( BigInt ; BigInt' )
 open import Algebra.Limbs
 open import Algebra.Misc
 
@@ -153,7 +153,7 @@ sub mod1 mod2 = unwrap2 mod1 mod2 \big1 big2 -> wrap (sub' big1 big2)
 private
 
   reduceBySubtraction : Tm Big -> Tm Mod
-  reduceBySubtraction input = wrap (App (Fix (Lam worker)) input) where
+  reduceBySubtraction input = wrap (App (Fix worker) input) where
     worker : Tm (Big ⇒ Big) -> Tm (Big ⇒ Big)
     worker rec = Lam \y -> ifte (BigInt.isLT y primeBigInt)
       y

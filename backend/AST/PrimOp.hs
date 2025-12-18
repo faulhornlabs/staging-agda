@@ -55,6 +55,8 @@ simplePrimOpTy prim args = case prim of
   "BitXor"        -> U64
   "RotLeftU64"    -> Pair Bit U64
   "RotRightU64"   -> Pair Bit U64
+  "ShiftLeftByU64"  -> U64
+  "ShiftRightByU64" -> U64
   "EqU64"         -> Bit
   "LtU64"         -> Bit
   "LeU64"         -> Bit

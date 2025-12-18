@@ -78,14 +78,18 @@ evalNormalPrim primArgs =
     "BitXor"        :@@ [ U64V x , U64V y ]             -> U64V (x `xor` y)
     "RotLeftU64"    :@@ [ BitV cin , U64V x ]           -> pairBitU64 (rotLeftU64  cin x)    
     "RotRightU64"   :@@ [ BitV cin , U64V x ]           -> pairBitU64 (rotRightU64 cin x)
+    "ShiftLeftByU64"  :@@ [ U64V x , U64V k ]           -> U64V (shiftLeft64  (fromIntegral k) x)
+    "ShiftRightByU64" :@@ [ U64V x , U64V k ]           -> U64V (shiftRight64 (fromIntegral k) x)
     "EqU64"         :@@ [ U64V x   , U64V y ]           -> BitV (primEqU64 x y) 
     "LtU64"         :@@ [ U64V x   , U64V y ]           -> BitV (primLtU64 x y)  
     "LeU64"         :@@ [ U64V x   , U64V y ]           -> BitV (primLeU64 x y) 
     "CastBitU64"    :@@ [ BitV b ]                      -> U64V (primCastBitU64 b)
     "Not"           :@@ [ BitV b ]                      -> BitV (not b)
-    "And"           :@@ [ BitV a , BitV b ]             -> BitV (a && b)
-    "Or"            :@@ [ BitV a , BitV b ]             -> BitV (a || b)
-    "IFTE"          :@@ [ BitV b , x , y ]              -> if b then x else y
+{-
+    "And"           :@@ [ BitV a , BitV b ]             -> BitV (a && b)        -- \ 
+    "Or"            :@@ [ BitV a , BitV b ]             -> BitV (a || b)        --  } must be lazy!!!
+    "IFTE"          :@@ [ BitV b , x , y ]              -> if b then x else y   -- / 
+-}
     "MkStruct"      :@@ xs                              -> StructV xs
     "Unwrap"        :@@ [ WrapV _ x ]                   -> x
     "Zero"          :@@ []                              -> NatV 0

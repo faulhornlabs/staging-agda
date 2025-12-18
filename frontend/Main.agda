@@ -9,6 +9,7 @@ module Main where
 
 open import Data.Nat
 open import Data.String
+open import Data.Maybe
 
 open import Level
 open import Data.Unit.Polymorphic
@@ -22,11 +23,12 @@ open import Examples.Simple
 open import Examples.Poseidon2
 open import Examples.Tests
 open import Examples.IOExample
+open import Examples.FFT
 
 --------------------------------------------------------------------------------
 
 exStr1 : String
-exStr1 = Export.exportToString exIO0b -- exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
+exStr1 = Export.exportToString exRecAddMul -- exFFT0a -- exLoop0 -- exIO0b -- exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
 
 -- letFunTest -- liftTest1 -- myApplication -- small2 -- exMont2 -- mixedLam1 -- lamEx2a -- exMod1 -- natEx2 
 

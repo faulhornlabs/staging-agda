@@ -24,7 +24,7 @@ open import Data.Product using ( _×_ ; _,′_ )
 
 open import Meta.Ty
 open import Meta.Ctx
-open import Meta.CtxLemmas using ( fixToLetRec )
+open import Meta.CtxLemmas using ( inExtendedCtx ; lastVar )
 open import Meta.Val
 open import Meta.PrimOp
 open import Meta.IO
@@ -64,6 +64,10 @@ convert' = go where
     body <- go (f (HOAS.Var s n))
     just (STLC.Lam body)
 
+  go {n} {ctx} {u} (HOAS.Fix f) = do
+    body <- go (f (HOAS.Var u n))
+    just (STLC.Rec body lastVar)
+
   go {n} {ctx} (HOAS.Let {s} rhs kont) = do
     rhs'  <- go rhs
     body' <- go (kont (HOAS.Var s n))
@@ -80,11 +84,6 @@ convert' = go where
     prim' <- mapMaybePrim go prim
     just (STLC.Pri prim')
      
-  go (HOAS.Fix f) = do
-    f' <- go f
-    just (fixToLetRec f')
-    -- just (STLC.Fix f')
-
   go (HOAS.Log n x) = do
     x' <- go x
     just (STLC.Log n x')

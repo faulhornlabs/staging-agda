@@ -64,6 +64,10 @@ data IsVTy where
 data VTy where
   MkVTy : (ty : Ty) -> IsVTy ty -> VTy
 
+BitVTy U64VTy : VTy
+BitVTy = MkVTy Bit IsBit
+U64VTy = MkVTy U64 IsU64
+
 private
 
   open import Data.Maybe.Effectful renaming ( applicative to maybeApplicative )
@@ -157,9 +161,34 @@ strEq s t | (just p) = STrue p
 
 ----------------------------------------
 
+isVTyEq    : {t : Ty} -> (p q : IsVTy t)           -> SemiDec (p  ≡ q )
+isVTyVecEq : {ts : Vec Ty n} -> (ps qs : HList IsVTy ts) -> SemiDec (ps ≡ qs)
+
+isVTyEq IsBit   IsBit  = STrue refl
+isVTyEq IsU64   IsU64  = STrue refl
+isVTyEq (IsNamed n s) (IsNamed m t) with strEq n m
+... | SFalse = SFalse
+... | (STrue refl) with isVTyEq s t
+...                 | SFalse     = SFalse
+...                 | STrue refl = STrue refl
+isVTyEq (IsStruct {n} u) (IsStruct {m} v) with natEq n m
+... | SFalse = SFalse
+... | STrue refl with isVTyVecEq u v
+...                    | SFalse     = SFalse
+...                    | STrue refl = STrue refl
+
+isVTyVecEq Nil         Nil         = STrue refl
+isVTyVecEq (Cons x xs) (Cons y ys) with isVTyEq x y
+... | SFalse = SFalse
+... | STrue refl with isVTyVecEq xs ys
+...              | SFalse     = SFalse
+...              | STrue refl = STrue refl
+
+----------------------------------------
+
 tyEq     : (s t : Ty      ) -> SemiDec (s ≡ t)
-vtyEq    : (s t : VTy     ) -> SemiDec (s ≡ t)
 tyVecEq  : (u v : Vec Ty n) -> SemiDec (u ≡ v)
+vtyEq    : (s t : VTy     ) -> SemiDec (s ≡ t)
 
 tyEq = go where
 
@@ -195,8 +224,11 @@ tyEq = go where
 
   go _ _ = SFalse
 
--- TODO!!!
-vtyEq s t = SFalse
+vtyEq (MkVTy s p) (MkVTy t q) with tyEq s t
+... | SFalse  = SFalse
+... | STrue refl with isVTyEq p q
+...              | SFalse     = SFalse
+...              | STrue refl = STrue refl
 
 tyVecEq []       []       = STrue refl
 tyVecEq (x ∷ xs) (y ∷ ys) with tyEq x y

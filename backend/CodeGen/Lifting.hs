@@ -174,6 +174,8 @@ addApps = go where
   go fun []     = fun
   go fun (a:as) = go (App fun a) as
 
+--------------------------------------------------------------------------------
+
 lambdaLifting :: Raw -> Program Raw
 lambdaLifting raw =
 

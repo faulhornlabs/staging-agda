@@ -38,7 +38,7 @@ data Tm : (ty : Ty) -> Set where
   Lam : (Tm s -> Tm t) -> Tm (s ⇒ t)
   Let : Tm s -> (Tm s -> Tm t) -> Tm t
   App : Tm (s ⇒ t) -> Tm s -> Tm t
-  Fix : Tm ((s ⇒ t) ⇒ (s ⇒ t)) -> Tm (s ⇒ t)
+  Fix : (Tm (s ⇒ t) -> Tm (s ⇒ t)) -> Tm (s ⇒ t)
   Pri : PrimOp Tm t -> Tm t
   Lit : Literal t -> Tm t
   Var : (s : Ty) -> (l : ℕ) -> Tm s        -- this is only for conversion to first order syntax

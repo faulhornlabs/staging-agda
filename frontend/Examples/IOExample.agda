@@ -8,7 +8,7 @@ open import Data.Nat
 open import Data.String
 
 -- open import Function using ( _$_ )
--- open import Relation.Binary.PropositionalEquality
+open import Relation.Binary.PropositionalEquality using ( refl )
 
 open import Meta.Object hiding ( Gen ; return ; _>>_ ; _>>=_ )
 
@@ -30,6 +30,8 @@ thePrime-ℕ = bigFieldPrime (ScalarField BN254)
 
 thePrime : Prime
 thePrime = mkPrime thePrime-ℕ
+
+open U64Lib using ( kstU64′ )
 
 --------------------------------------------------------------------------------
 -- *** MONTGOMERY ***
@@ -72,56 +74,53 @@ module MyMain where
     ty  : Ty
     s t : Ty
     
-  data MIO : Ty -> Set where
-    MkMIO : Tm (IO ty) -> MIO ty
-
-  runMIO : MIO ty -> Tm (IO ty)
-  runMIO (MkMIO tm) = tm
-  
   private
-    _>>=_ : MIO s -> (Tm s -> MIO t) -> MIO t    
-    _>>=_ (MkMIO u) h = MkMIO (bind u (Lam \x -> runMIO (h x)))
+    _>>=_ : Tm (IO s) -> (Tm s -> Tm (IO t)) -> Tm (IO t)    
+    _>>=_ u h = bind u (Lam \x -> h x)
 
-    _>>_ : MIO s -> MIO t -> MIO t
-    _>>_ (MkMIO u) (MkMIO v) = MkMIO (then u v)
-
-    mreturn : Tm ty -> MIO ty
-    mreturn x = MkMIO (return x)
-
-  mget : {ty : Ty} -> String -> MIO ty
-  mget {ty} name = MkMIO (get name ty)
-
-  mput : String -> Tm ty -> MIO Unit
-  mput name what = MkMIO (put name what)
+    _>>_ : Tm (IO s) -> Tm (IO t) -> Tm (IO t)
+    _>>_ u v = then u v
 
   open U64Lib
 
   test0 : Tm (IO Unit)
-  test0 = runMIO do
-    x <- mget "x"
-    mput "out" (addU64 x (kstU64′ 101))
+  test0 = do
+    x <- get′ "x" U64 
+    put "out" (addU64 x (kstU64′ 101))
 
   testA : Tm (IO U64)
-  testA = runMIO do
-    mput "foo" (kstU64′ 666)
-    mput "bar" (kstU64′ 777)
-    mreturn (kstU64′ 555)
+  testA = do
+    put "foo" (kstU64′ 666)
+    put "bar" (kstU64′ 777)
+    return (kstU64′ 555)
 
   test0b : Tm (IO Unit)
-  test0b = Let testA \action -> runMIO do
-    x <- mget "x"
-    mput "x_was" x
-    y <- MkMIO (action)
-    mput "out" (addU64 x y)
+  test0b = Let testA \action -> do
+    x <- get′ "x" U64
+    put "x_was" x
+    y <- action
+    put "out" (addU64 x y)
 
   test1 : Tm (IO Unit)
-  test1 = runMIO do
-    x <- mget "x"
-    y <- mget "y"
-    z <- mget "z"
-    mput "out1" (compute1 x y z) 
-    mput "out2" (compute2 x y z)
-    mreturn tt
+  test1 = do
+    x <- get "x"
+    y <- get "y"
+    z <- get "z"
+    put "out1" (compute1 x y z) 
+    put "out2" (compute2 x y z)
+    return tt
+
+  testLoop1 : Tm U64 -> Tm (IO U64)
+  testLoop1 n = do
+    withTmpArray {vty = U64VTy} n \arr -> do
+      for arr \i -> write {eq = refl} arr i (addU64 i (kstU64′ 1))
+      print "array" arr
+      read {eq = refl} arr (subU64 n (kstU64′ 1))
+
+  exLoop0 : Tm (IO Unit)
+  exLoop0 = do
+    z <- testLoop1 (kstU64′ 10)
+    put "result" z
 
 exIO0 : Tm (IO Unit)
 exIO0 = MyMain.test0
@@ -131,6 +130,14 @@ exIO0b = MyMain.test0b
 
 exIO1 : Tm (IO Unit)
 exIO1 = MyMain.test1
+
+exLoop0 : Tm (IO Unit)
+exLoop0 = MyMain.exLoop0
+
+{-
+exIOWtf : Tm (IO Unit)
+exIOWtf = MyMain.exIOWtf --  (kstU64′ 5)
+-}
 
 --------------------------------------------------------------------------------
 

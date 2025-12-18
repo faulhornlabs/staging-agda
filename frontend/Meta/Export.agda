@@ -107,7 +107,7 @@ data Raw : Set where
   Dbg : String -> Ty -> Raw -> Raw -> Raw
   
 {-# TERMINATING #-}
-convertToRaw : STLC.LC ctx t -> Raw
+convertToRaw : STLC.LC ctx t -> Raw 
 convertToRaw = go where
 
   go : {n : ℕ} -> {ctx : Ctx n} -> {ty : Ty} -> STLC.LC ctx ty -> Raw
@@ -154,5 +154,6 @@ exportToStringMaybe tm = do
 exportToString : {ty : Ty} -> HOAS.Tm ty -> String
 exportToString tm with exportToStringMaybe tm
 exportToString _ | (just str) = str
+exportToString _ | nothing    = "<<nothing>>"
 
 --------------------------------------------------------------------------------
