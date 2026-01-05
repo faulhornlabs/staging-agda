@@ -31,7 +31,6 @@ pattern Dec tm = Sub tm (Lit 1)
 pattern App2 f x y = App (App f x) y
 pattern Lam2 body  = Lam (Lam body)
 
-
 --------------------------------------------------------------------------------
 
 -- letrec plus100 n = if n == 0 then 100 else 1 + plus100 (n-1)
