@@ -4,12 +4,15 @@
 module AST.Term
   ( AST 
   , Raw(..) 
+  , pattern NamedLam , pattern NamedVar
   , appList , lamList
   , shiftVars , mapVars -- , shiftVars'
   , module AST.Ty
-  , module AST.Val
+  , module AST.Literal
   , module AST.PrimOp
-  , TyEnv , inferTy , inferTy_
+  , Ctx , TyEnv , emptyCtx , ctxLkp , ctxToLevel
+  , inferTy , inferTy_
+  , isLambda' , isLambda , isApp' , isApp
   )
   where
 
@@ -22,16 +25,13 @@ import Data.IntMap ( IntMap )
 import qualified Data.IntMap as IntMap
 
 import AST.Ty
-import AST.Val
+import AST.Literal
 import AST.PrimOp
 import AST.IO
 
 import Aux.Misc
 
 --------------------------------------------------------------------------------
-
-type Level  = Int
-type TopLev = Int
 
 type AST = Raw
 
@@ -41,16 +41,16 @@ data Raw where
   Rec :: Ty -> Raw -> Raw -> Raw
   App :: Raw -> Raw -> Raw
   Pri :: RawPrim -> [Raw] -> Raw
-  Lit :: Val -> Raw
+  Lit :: Literal -> Raw
   Var :: Level  -> Raw
   -- hacks...
-  Top :: TopLev -> Raw                      -- ^ top level variable. This is only used for lambda lifting
-  Log :: String -> Raw -> Raw               -- ^ give name to things for debugging etc
-  Dbg :: String -> Ty -> Raw -> Raw -> Raw  -- ^ printf debugging support
+  -- Top :: TopLev -> Raw                         -- ^ top level variable. This is only used when evaluating of lambda-lifted expressions
+  Log :: String -> Raw -> Raw                  -- ^ give name to things for debugging etc
+  Dbg :: String -> Ty -> Raw -> Raw -> Raw     -- ^ printf debugging support hack
 
 pattern NamedVar name j    = Log name (Var j)
-pattern NamedTop name k    = Log name (Top k)
 pattern NamedLam name ty f = Log name (Lam ty f)
+-- pattern NamedTop name k    = Log name (Top k)
 
 deriving instance Eq   Raw
 deriving instance Show Raw
@@ -81,9 +81,9 @@ shiftVars' f = go 0 where
   go :: Level -> Raw -> Raw
   go level term = case term of
 
-    Var j -> Var (f level j)
-    Top k -> Top k
     Lit v -> Lit v
+    Var j -> Var (f level j)
+    -- Top k -> Top k
 
     App fun args -> App (go level fun) (go level args)
     Pri op  args -> Pri op (map (go level) args)
@@ -102,9 +102,9 @@ mapVars f = go 0 where
   go :: Level -> Raw -> Raw
   go level term = case term of
 
-    Var j -> f j
-    Top k -> Top k
     Lit v -> Lit v
+    Var j -> f j
+    -- Top k -> Top k
 
     App fun args -> App (go level fun) (go level args)
     Pri op  args -> Pri op (map (go level) args)
@@ -120,24 +120,38 @@ mapVars f = go 0 where
 
 --------------------------------------------------------------------------------
 
-type TyEnv = Seq Ty
+type Ctx   = Seq Ty
+type TyEnv = Ctx
+
+ctxLkp :: Ctx -> Level -> Ty
+ctxLkp = Seq.index
+
+emptyCtx :: Ctx
+emptyCtx = Seq.empty
+
+ctxToLevel :: Ctx -> Level
+ctxToLevel = Seq.length
+
+----------------------------------------
 
 inferTy_ :: Raw -> Ty
 inferTy_ = inferTy Seq.empty Seq.empty
 
-inferTy :: TyEnv -> TyEnv -> Raw -> Ty
+inferTy :: Ctx -> Ctx -> Raw -> Ty
 inferTy topEnv = go where
 
-  go :: TyEnv -> Raw -> Ty
+  go :: Ctx -> Raw -> Ty
   go localEnv term = case term of
 
     Var j -> case Seq.lookup j localEnv of 
       Just ty -> ty 
       Nothing -> error $ "inferTy: local variable " ++ show j ++ " not found in local context"
-    
+
+{-    
     Top k -> case Seq.lookup k topEnv of 
       Just ty -> ty 
       Nothing -> error $ "inferTy: top level variable " ++ show k ++ " not found in top level context"
+-}
 
     Lam t body     -> Arrow t (go (localEnv |> t) body)
 
@@ -159,9 +173,37 @@ inferTy topEnv = go where
 
     Pri op args -> primOpTy op (map (go localEnv) args)
 
-    Lit val -> valTy val
+    Lit lit -> literalTy lit
 
     Log _ body  -> go localEnv body
     Dbg _ _ _ y -> go localEnv y
+
+--------------------------------------------------------------------------------
+
+isLambda' :: Ctx -> Raw -> Lams FunTy Raw
+isLambda' = go where
+  go :: Ctx -> Raw -> Lams FunTy Raw
+  go ctx tm = case tm of
+    Lam ty body -> case go (ctx |> ty) body of 
+                     MkLams (MkFunTy args ret) body' -> MkLams (MkFunTy (ty:args) ret) body' 
+    _           -> let t = inferTy emptyCtx ctx tm in MkLams (MkFunTy [] t) tm
+
+isApp' :: Raw -> Apps Raw Raw
+isApp' = go where
+  go tm = case tm of
+    App f x -> case go f of { MkApps f xs -> MkApps f (xs ++ [x]) }
+    _       -> MkApps tm []
+
+isLambda :: Ctx -> Raw -> Maybe (Lams FunTy Raw)
+isLambda ctx tm = case isLambda' ctx tm of
+  MkLams funty body -> case funty of
+    MkFunTy [] ret -> Nothing
+    _              -> Just (MkLams funty body)
+
+isApp :: Raw -> Maybe (Apps Raw Raw)
+isApp tm = case isApp' tm of
+  MkApps f xs -> case xs of
+    [] -> Nothing
+    _  -> Just (MkApps f xs)
 
 --------------------------------------------------------------------------------

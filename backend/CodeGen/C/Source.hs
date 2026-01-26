@@ -18,27 +18,23 @@ import qualified Data.Sequence as Seq ; import Data.Sequence ( Seq , (|>) , (<|)
 import qualified Data.Foldable as F
 
 import AST.Ty
-import AST.Val
+import AST.Literal
 import AST.PrimOp
 
-import CodeGen.Lifting ( Program(..) , FunDef(..) )
+import CodeGen.Lifting ( Program , Program'(..) , FunDef(..) )
 import CodeGen.ANF     ( Atom(..) , ExpA(..) , ANF(..) , ANFE , extractAllTysExp , typeOfANFE )
 
 import CodeGen.C.Types
 import CodeGen.C.Prelude
 
 import Aux.Lens
-
---------------------------------------------------------------------------------
-
-type Level  = Int
-type TopLev = Int
+import Aux.Misc
 
 --------------------------------------------------------------------------------
 
 anfToCSource :: Program ANFE -> String
-anfToCSource program = cprelude ++ sep ++ unlines tydecls ++ sep ++ code where
-  topnames = fmap _funName (_topLevel program)
+anfToCSource program@(MkProgram toplevel main) = cprelude ++ sep ++ unlines tydecls ++ sep ++ code where
+  topnames = fmap _funName toplevel
   (tydecls, tymap) = calculateTyMapping program
   code = runCodegenM topnames tymap action
   action = do
@@ -148,7 +144,7 @@ addProgram (MkProgram fundefs mainANF) = do
   mapM addFunDef fundefs
   let mainTy    = typeOfANFE mainANF 
   let mainFunTy = MkFunTy [] mainTy
-  let preMain   = MkFunDef 0 "program" mainFunTy mainANF False 
+  let preMain   = MkFunDef 0 "program" (MkLams mainFunTy mainANF)
   addFunDef preMain
   addLine sep
   addMain $ typeOfANFE mainANF
@@ -185,7 +181,7 @@ cgenExp level declset cvar (MkTyped ty expr) = do
   cty <- fetchTyName ty
   let declPrefix    = cty ++ " " ++ cvar ++ ";"
       declSetPrefix = cty ++ " " ++ cvar ++ " = "
-      justSetPrefix =               cvar ++ " = "
+      justSetPrefix =               cvar ++ " = (" ++ cty ++ ") "
       setPrefix = case declset of
         DeclareAndSet -> declSetPrefix
         JustSet       -> justSetPrefix
@@ -228,7 +224,7 @@ addANFWithReturn level anf = do
   addLine ret
   
 addFunDef :: FunDef ANFE -> CG ()
-addFunDef (MkFunDef idx name funTy@(MkFunTy argTys retTy) body _isFix) = do
+addFunDef (MkFunDef idx name (MkLams funTy@(MkFunTy argTys retTy) body)) = do
   cretTy <- fetchTyName retTy
   let arity = length argTys
   args <- forM (zip [0..] argTys) $ \(i,ty) -> do
@@ -241,27 +237,26 @@ addFunDef (MkFunDef idx name funTy@(MkFunTy argTys retTy) body _isFix) = do
 --------------------------------------------------------------------------------
 
 cgenAtom' :: Program a -> Atom -> String
-cgenAtom' program atom = case atom of
-  TopA k -> _funName (Seq.index (_topLevel program) k)
+cgenAtom' program@(MkProgram toplevel main) atom = case atom of
+  TopA k -> _funName (Seq.index toplevel k)
   _      -> cgenAtom atom
 
 cgenAtom :: Atom -> String
 cgenAtom atom = case atom of
-  KstA v -> cgenVal v
+  KstA l -> cgenLit l
   VarA j -> "x" ++ show j 
   TopA k -> error "cgenAtom: top level function"
 
 --------------------------------------------------------------------------------
 
-cgenVal :: Val -> String
-cgenVal val = case val of
-  TtV         -> "(Unit)0"
-  BitV b      -> if b then "1" else "0"
-  U64V x      -> printf "0x%x" x
-  NatV n      -> show n
-  StructV xs  -> cgenStruct_ (map cgenVal xs)
-  WrapV _ x   -> cgenVal x
-  FunV {}     -> error "cgenVal: FunV"
+cgenLit :: Literal -> String
+cgenLit val = case val of
+  TtL         -> "(Unit)0"
+  BitL b      -> if b then "1" else "0"
+  U64L x      -> printf "0x%x" x
+  NatL n      -> show n
+  StructL xs  -> cgenStruct_ (map cgenLit xs)
+  WrapL _ x   -> cgenLit x
 
 cgenStruct_ :: [String] -> String
 cgenStruct_ xs = "{ " ++ intercalate " , " xs ++ " }"
@@ -307,6 +302,8 @@ cgenNormalPrim primArgs =
     "BitXor"        :@@ [ x , y ]        -> cgenAtom x ++ " ^ " ++ cgenAtom y
     "RotLeftU64"    :@@ [ cin , x ]      -> "rotLeftU64( "  ++ cgenAtom cin ++ " , " ++ cgenAtom x ++ " )"
     "RotRightU64"   :@@ [ cin , x ]      -> "rotRightU64( " ++ cgenAtom cin ++ " , " ++ cgenAtom x ++ " )"
+    "ShiftLeftByU64 " :@@ [ x , k ]      -> "(x<<k)"
+    "ShiftRightByU64" :@@ [ x , k ]      -> "(x>>k)"
     "EqU64"         :@@ [ x   , y ]      -> "(" ++ cgenAtom x ++ " == " ++ cgenAtom y ++ ")"
     "LtU64"         :@@ [ x   , y ]      -> "(" ++ cgenAtom x ++ " < "  ++ cgenAtom y ++ ")"
     "LeU64"         :@@ [ x   , y ]      -> "(" ++ cgenAtom x ++ " <= " ++ cgenAtom y ++ ")"
@@ -362,7 +359,7 @@ calculateTyMapping (MkProgram tops main) =
       workerANF main
 
     workerFunDef :: FunDef ANFE -> State TyState ()
-    workerFunDef (MkFunDef idx name (MkFunTy argsTy retTy) body _isFix) = do
+    workerFunDef (MkFunDef idx name (MkLams (MkFunTy argsTy retTy) body)) = do
       mapM_ workerTy argsTy
       workerTy retTy 
       workerANF body

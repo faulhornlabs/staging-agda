@@ -59,12 +59,12 @@ randomTermU64 targetSize = final where
   maxArity = 4
 
   -- if we don't start with a Let, then "Var" may just fail
-  final = Let U64 (Lit (U64V 666)) <$> (extract <$> mkTerm targetSize 1)
+  final = Let U64 (Lit (U64L 666)) <$> (extract <$> mkTerm targetSize 1)
 
   mkKst :: IO (Sized Raw)
   mkKst = do
     k <- randomRIO (1,65536)
-    return $ MkSized 1 $ Lit (U64V k)
+    return $ MkSized 1 $ Lit (U64L k)
 
   mkAtom :: Level -> IO (Sized Raw)
   mkAtom level = do

@@ -14,7 +14,7 @@ open import Data.String
 open import Function using ( _$_ )
 open import Relation.Binary.PropositionalEquality using ( refl )
 
-open import Meta.Object hiding ( Gen ; return ; _>>_ ; _>>=_ )
+open import Meta.Object hiding ( Gen ; pure ; return ; _>>_ ; _>>=_ )
 
 --------------------------------------------------------------------------------
 

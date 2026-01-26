@@ -13,7 +13,7 @@ open import Data.Vec
 open import Data.Maybe using ( Maybe ; nothing ; just )
 open import Data.String using ( String )
 
-open import Meta.Ty using ( Ty ; Unit ; Pair ; Vect ; IO )
+open import Meta.Ty using ( Ty ; Unit ; _⇒_ ; Pair ; Vect ; IO ; Token )
 open import Meta.HOAS
 open import Meta.Lib using ( fst ; snd ; mkPair ; vecproj )
 
@@ -37,8 +37,11 @@ _>>=_ (MkGen h) u = MkGen \k -> h (\x -> unGen (u x) k)
 _>>_ : Gen A -> Gen B -> Gen B
 _>>_ (MkGen h) (MkGen g) = MkGen \k -> h (\_ -> g k)
 
+pure : A -> Gen A 
+pure x = MkGen \k -> k x
+
 return : A -> Gen A 
-return x = MkGen \k -> k x
+return = pure
 
 infixl 10 _>>=_
 infixl 10 _>>_
@@ -61,11 +64,48 @@ pair⇑ pair = do
   p ← gen pair
   return (fst p , snd p)
 
-pair⇓ : Gen (Tm s × Tm t) ->  Tm (Pair s t)
+pair⇓ : Gen (Tm s × Tm t) -> Tm (Pair s t)
 pair⇓ action = runGen do
   (x , y) ← action
   return (mkPair x y)
+
+--------------------------------------------------------------------------------
+
+opaque
+  unfolding IO
+
+  -- GenIO ty = IOT Gen ty
+  GenIO : Ty -> Set
+  GenIO ty = Tm Token -> Gen (Tm ty × Tm Token)
+
+  pureGenIO : Tm ty -> GenIO ty
+  pureGenIO what = \rwt -> pure (what , rwt)
+
+  bindGenIO : GenIO s -> (Tm s -> GenIO t) -> GenIO t
+  bindGenIO u h = \rwt -> do
+    (x , rwt′) <- u rwt
+    h x rwt
+
+  private
+    -- see: "Closure-Free Functional Programming in a Two-Level Type Theory" by Andras Kovacs
+    
+    io⇑′ : Tm (Token ⇒ Pair t Token) -> (Tm Token -> Gen (Tm t × Tm Token))
+    io⇑′ f rwt = pair⇑ (App f rwt)
   
+    io⇓′ : (Tm Token -> Gen (Tm t × Tm Token)) -> Tm (Token ⇒ Pair t Token)
+    io⇓′ g = Lam \rwt -> pair⇓ (g rwt)
+
+  io⇑ : Tm (IO t) -> GenIO t
+  io⇑ = io⇑′ 
+  
+  io⇓ : GenIO t -> Tm (IO t)
+  io⇓ = io⇓′
+
+{-
+  genIO : Tm (IO ty) -> GenIO ty
+  genIO = io⇑
+-}
+
 --------------------------------------------------------------------------------
 
 import Meta.Lib

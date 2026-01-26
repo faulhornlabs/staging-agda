@@ -11,6 +11,7 @@ import Text.Read
 import Text.Show.Pretty
 
 import AST.Term
+import AST.Val
 import AST.Random
 import Run.Eval
 
@@ -34,14 +35,14 @@ import Big.Limbs
 -- main = main_Small1
 -- main = main_Nat
 
--- main = main_modInv
+main = main_modInv
 -- main = main_tiny_modInv
 -- main = main_baby_modInv
 -- main = main_montDiv
 -- main = main_recAdd
 -- main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
 
-main = runCommon "examples/ex_fft0.ast" $ \_ -> return ()
+--main = runCommon "examples/ex_fft0.ast" $ \_ -> return ()
 --main = runCommon "examples/ex_io2.ast" $ \_ -> return ()
 
 main_binary = do
@@ -73,7 +74,7 @@ main_Mod1 = do
   runCommon "examples/ex_mod1.ast" $ \_ -> return ()
 
 main_recAdd = do
---  runCommon "examples/ex_recadd.ast" $ \_ -> return ()
+  --runCommon "examples/ex_recadd.ast" $ \_ -> return ()
   runCommon "examples/ex_recmul.ast" $ \_ -> return ()
 
 main_ModP = do
@@ -199,14 +200,19 @@ runCommon' printAstFlag fname kont = do
 
       putStrLn $ "\neval result = " ++ show res
 
-      let program = lambdaLifting ast
-      let anf     = programToANF  program
-      let csource = anfToCSource  anf 
+      let program = lambdaLift   ast
+      let anf     = programToANF program
+      let csource = anfToCSource anf 
+
+      putStrLn $ "\nresult of the original term     = " ++ show res
 
       when printAstFlag $ do
         putStrLn "---------------------------"
         putStrLn $ "lambda-lifted program:"
         printProgram program
+
+      res' <- runProgram program
+      putStrLn $ "\nresult of lambda lifted program = " ++ show res' 
 
       when printAstFlag $ do
         putStrLn "---------------------------"
@@ -234,23 +240,23 @@ runCommon' printAstFlag fname kont = do
 
 exRaw0 :: Raw
 exRaw0 = 
-  -- Lit (U64V 101) 
-  -- (Pri (MkRawPrim "AddU64") [ Lit (U64V 101) , Lit (U64V 102) ])
-  Let U64 (Lit (U64V 101)) (Var 0)
+  -- Lit (U64L 101) 
+  -- (Pri (MkRawPrim "AddU64") [ Lit (U64L 101) , Lit (U64L 102) ])
+  Let U64 (Lit (U64L 101)) (Var 0)
 
 exRaw1 :: Raw
 exRaw1 = Let U64 
-  (Pri (MkRawPrim "AddU64") [ Lit (U64V 101) , Lit (U64V 102) ])
+  (Pri (MkRawPrim "AddU64") [ Lit (U64L 101) , Lit (U64L 102) ])
   (Pri (MkRawPrim "MulTruncU64") [ Var 0 , Var 0 ])
 
 exRaw2 :: Raw
-exRaw2 = Let U64 (Lit (U64V 666)) (Pri (MkRawPrim "MulTruncU64") [Var 0,App (App (Lam U64 (Lam U64 (Var 2))) (Lit (U64V 11999))) (Lit (U64V 25715))])
+exRaw2 = Let U64 (Lit (U64L 666)) (Pri (MkRawPrim "MulTruncU64") [Var 0,App (App (Lam U64 (Lam U64 (Var 2))) (Lit (U64L 11999))) (Lit (U64L 25715))])
 
 exRaw3 :: Raw
-exRaw3 = Let U64 (Lit (U64V 666)) (Pri (MkRawPrim "AddU64") [Let U64 (Var 0) (Lit (U64V 30236)),Let U64 (Lit (U64V 25007)) (Var 1)])
+exRaw3 = Let U64 (Lit (U64L 666)) (Pri (MkRawPrim "AddU64") [Let U64 (Var 0) (Lit (U64L 30236)),Let U64 (Lit (U64L 25007)) (Var 1)])
 
 exRaw4 :: Raw
-exRaw4 = Let U64 (Lit (U64V 666)) (Let U64 (Let U64 (Var 0) (Lit (U64V 49887))) (Let U64 (Lit (U64V 22063)) (Var 2)))
+exRaw4 = Let U64 (Lit (U64L 666)) (Let U64 (Let U64 (Var 0) (Lit (U64L 49887))) (Let U64 (Lit (U64L 22063)) (Var 2)))
 
 debugAnfConversion :: Size -> IO ()
 debugAnfConversion target = do
@@ -262,7 +268,7 @@ debugAnfConversion' term = do
   if (inferTy_ term /= U64) 
     then error "debugAnfConversion: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLifting term
+      let prg  = lambdaLift   term
       let anf  = programToANF prg
 
       putStrLn "---------------------------"
@@ -285,7 +291,7 @@ debugAnfConversion' term = do
 findAnfCounterExample :: Size -> IO Raw
 findAnfCounterExample target = do
   term <- randomTermU64 target
-  let prg  = lambdaLifting term
+  let prg  = lambdaLift   term
   let anf  = programToANF prg
   res2 <- runProgram prg
   res3 <- runANFProgram anf
@@ -301,7 +307,7 @@ testLambdaLifting1 target = do
   if (inferTy_ term /= U64) 
     then error "testLambdaLifting1: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLifting term
+      let prg  = lambdaLift term
       res1 <- eval term
       res2 <- runProgram prg
       return (res1 == res2)
@@ -312,7 +318,7 @@ testAnfConversion1 target = do
   if (inferTy_ term /= U64) 
     then error "testAnfConversion1: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLifting term
+      let prg  = lambdaLift   term
       let anf  = programToANF prg
       res1 <- eval term
       res2 <- runProgram prg

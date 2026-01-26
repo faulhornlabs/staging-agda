@@ -72,11 +72,11 @@ showRValPrec = go where
 
   go : ℕ -> RVal -> String
   go d  TtV         = "TtV"
-  go d (BitV b)     = showParen (d >ᵇ appPrec) ("BitV " ++ showBoolHs b)
-  go d (U64V w    ) = showParen (d >ᵇ appPrec) ("U64V " ++ showWord64 w)
-  go d (NatV n    ) = showParen (d >ᵇ appPrec) ("NatV " ++ showNat    n)
-  go d (WrapV n v)  = showParen (d >ᵇ appPrec) ("WrapV " ++ showString n ++ " " ++ go appPrec₊₁ v)
-  go d (StructV xs) = showParen (d >ᵇ appPrec) ("StructV " ++ showList (go 0) xs)
+  go d (BitV b)     = showParen (d >ᵇ appPrec) ("BitL " ++ showBoolHs b)
+  go d (U64V w    ) = showParen (d >ᵇ appPrec) ("U64L " ++ showWord64 w)
+  go d (NatV n    ) = showParen (d >ᵇ appPrec) ("NatL " ++ showNat    n)
+  go d (WrapV n v)  = showParen (d >ᵇ appPrec) ("WrapL " ++ showString n ++ " " ++ go appPrec₊₁ v)
+  go d (StructV xs) = showParen (d >ᵇ appPrec) ("StructL " ++ showList (go 0) xs)
 
 {-
   -- just testing the termination checker

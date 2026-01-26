@@ -28,7 +28,7 @@ open import Examples.FFT
 --------------------------------------------------------------------------------
 
 exStr1 : String
-exStr1 = Export.exportToString exFFT2 -- exRecAddMul -- exLoop0 -- exIO0b -- exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
+exStr1 = Export.exportToString exRecAdd -- exRecAddMul -- exModInv -- exFFT2 -- exRecAddMul -- exLoop0 -- exIO0b -- exClosure1 -- exRecMul -- exMontInv -- exModInv -- exInvU64xy -- exBabyModInv --exTinyModInv -- exIO1 -- Big.exBinary -- natEx2 -- exMont2b  -- myApplication  -- exBigMul  -- exMod1 -- exSmall1 -- myApplication
 
 -- letFunTest -- liftTest1 -- myApplication -- small2 -- exMont2 -- mixedLam1 -- lamEx2a -- exMod1 -- natEx2 
 

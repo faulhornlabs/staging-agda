@@ -19,9 +19,9 @@ import AST.Ty
 import AST.Val
 import AST.PrimOp
 import AST.IO
-import AST.Term
+import AST.Term hiding (Top)
 
-import CodeGen.Lifting
+import CodeGen.Lifting 
 import CodeGen.ANF
 
 import Run.Input
@@ -37,8 +37,8 @@ eval orig = do
   case ty of
     Arrow Token pair -> do
       putStrLn "eval: input is IO action"
-      let rwt_in = Lit (TokenV 0)
-      out <- eval' (App orig rwt_in)
+      funval <- eval' orig
+      out    <- valApp funval (TokenV 0)
       case out of 
         PairV result (TokenV _) -> return result
         _ -> fail "eval/IO: expecting a (result,Token) pair"
@@ -47,20 +47,10 @@ eval orig = do
       eval' orig
 
 eval' :: Raw -> IO Val
-eval' = evalInEnv Seq.empty emptyEnv
+eval' = evalInEnv emptyEnv
 
---------------------------------------------------------------------------------
-
-debugPutStrLn :: String -> IO ()
-debugPutStrLn = putStrLn
-
-debugPrint :: Show a => String -> a -> IO ()
-debugPrint name x = debugPutStrLn $ ">>> " ++ name ++ " = " ++ show x
-
---------------------------------------------------------------------------------
-
-evalInEnv :: Seq (FunDef Raw) -> Env -> Raw -> IO Val
-evalInEnv topEnv = go where
+evalInEnv :: Env -> Raw -> IO Val
+evalInEnv = go where
 
   go ::  Env -> Raw -> IO Val
   go env term = do
@@ -86,24 +76,14 @@ evalInEnv topEnv = go where
       let f = go (env |> Thk f) rhs 
       go (env |> Thk f) body
 
-{-
-    Fix fun -> do
-      fun' <- go env fun
-      case fun' of
-        Fun f -> mfix f -- evalFixM f
-        _     -> error "evalInEnvM: fixpoint of a non-lambda"
--}
-
     Pri op@(MkRawPrim name) args -> case isLazyPrim name of
       True  -> lazyPrim   env name args
       False -> normalPrim env op   args
     Pri op args -> normalPrim env op args
 
-    Lit val -> return val
+    Lit lit -> return (literalToVal lit)
 
     Var j -> return (Seq.index env j)
-
-    Top k -> go Seq.empty $ funDefToLam (Seq.index topEnv k)
 
     Log _ body -> go env body
 
@@ -145,10 +125,114 @@ evalInEnv topEnv = go where
 
 --------------------------------------------------------------------------------
 
-runProgram :: Program Raw -> IO Val
-runProgram (MkProgram tops main) = evalInEnv tops Seq.empty main
+debugPutStrLn :: String -> IO ()
+debugPutStrLn = putStrLn
 
-runProgramWithInputs :: Inputs -> Program Raw -> IO (Outputs, Val)
+debugPrint :: Show a => String -> a -> IO ()
+debugPrint name x = debugPutStrLn $ ">>> " ++ name ++ " = " ++ show x
+
+--------------------------------------------------------------------------------
+
+evalInTopEnv :: Seq (FunDef Raw') -> Env -> Raw' -> IO Val
+evalInTopEnv topEnv = go where
+
+  go ::  Env -> Raw' -> IO Val
+  go env term = do
+    value <- go' env term 
+    forceVal value
+
+  -- we need to evaluate a top-level function into a lambda value
+  goFunDef :: FunDef Raw' -> IO Val
+  goFunDef (MkFunDef _i _name (MkLams (MkFunTy argTys retTy) body)) = do
+    let nargs = length argTys
+    mkMultiFunVal nargs (\argSeq -> go argSeq body)
+
+  go' ::  Env -> Raw' -> IO Val
+  go' env term = case term of
+
+    App' fun args -> do
+      fun' <- go env fun
+      case fun' of
+        Fun f -> do { args' <- mapM (go env) args ; valApps fun' args' }
+        _     -> error "evalInTopEnvM: application to a non-lambda"
+
+    Let' _ty rhs body -> do
+      rhs' <- go env rhs
+      go (env |> rhs') body
+
+    Pri' op@(MkRawPrim name) args -> case isLazyPrim name of
+      True  -> lazyPrim   env name args
+      False -> normalPrim env op   args
+    Pri' op args -> normalPrim env op args
+
+    Lit' lit -> return (literalToVal lit)
+
+    Loc' j -> return (Seq.index env j)
+
+--    Top' k -> evalInEnv Seq.empty $ funDefToLam (Seq.index topEnv k)
+    Top' k -> goFunDef (Seq.index topEnv k)
+
+{-
+    Log' _ body -> go env body
+
+    Dbg' name ty x y -> do
+      x' <- go env x
+      debugPrint name x'
+      go env y
+-}
+
+  -- lazy primitives mess up stuff...
+
+  isLazyPrim :: String -> Bool
+  isLazyPrim "And"  = True
+  isLazyPrim "Or"   = True
+  isLazyPrim "IFTE" = True
+  isLazyPrim _      = False
+
+  normalPrim :: Env -> RawPrim -> [Raw'] -> IO Val
+  normalPrim env op args = do
+    ys <- mapM (go env) args 
+    evalPrimOpMonadic (MkPrim op ys)
+
+  lazyPrim :: Env -> String -> [Raw'] -> IO Val
+  lazyPrim env name args = case name of
+    "And"   -> lazyAnd env args
+    "Or"    -> lazyOr  env args
+    "IFTE"  -> lazyIf  env args
+
+  lazyIf env [cond,x,y] = do
+    BitV c <- go env cond
+    if c then go env x else go env y
+
+  lazyOr env [p,q] = do
+    BitV a <- go env p
+    if a then return (BitV True) else go env q
+
+  lazyAnd env [p,q] = do
+    BitV a <- go env p
+    if a then go env q else return (BitV False) 
+
+--------------------------------------------------------------------------------
+
+runProgram' :: Program Raw' -> IO Val
+runProgram' (MkProgram tops main) = evalInTopEnv tops Seq.empty main
+
+runProgram :: Program Raw' -> IO Val
+runProgram origProgram@(MkProgram tops origMain) = do
+  let ty = inferTyRaw' (fmap funDefTy tops) Seq.empty origMain
+  case ty of
+    Arrow Token pair -> do
+      putStrLn "runProgram: input is IO action"
+      funval <- runProgram' origProgram
+      out    <- valApp funval (TokenV 0)
+      case out of 
+        PairV result (TokenV _) -> return result
+        _ -> fail "runProgram/IO: expecting a (result,Token) pair"
+    _ -> do
+      putStrLn "runProgram: input is pure"
+      runProgram' origProgram
+
+runProgramWithInputs :: Inputs -> Program Raw' -> IO (Outputs, Val)
 runProgramWithInputs inputs prg = runWithInputs inputs $ runProgram prg
 
 
@@ -193,14 +277,14 @@ evalAnfInEnv topEnv = goANF where
   goAtom :: Env -> Atom -> IO Val
   goAtom locEnv atom = case atom of
     VarA j -> return $ Seq.index locEnv j
-    KstA v -> return $ v
+    KstA l -> return $ literalToVal l
     TopA k -> fail "evalANFInEnv: trying to evaluate top-level lambda"
 
   goTyExp ::  Env -> Typed ExpA -> IO Val
   goTyExp env (MkTyped ty expr) = goExp env expr
 
   goApp :: Env -> FunDef ANFE -> [Val] -> IO Val
-  goApp env (MkFunDef _idx _name funTy body _isFix) args = 
+  goApp env (MkFunDef _idx _name (MkLams funTy body)) args = 
     goANF (Seq.fromList args) body
     
   goExp :: Env -> ExpA -> IO Val

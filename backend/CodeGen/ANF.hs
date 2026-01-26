@@ -16,39 +16,41 @@ import qualified Data.IntMap   as IntMap ; import Data.IntMap   ( IntMap )
 import qualified Data.Set      as Set    ; import Data.Set      ( Set )
 
 import AST.Ty
-import AST.Val
+import AST.Literal
 import AST.PrimOp
 import AST.Term
-
-import CodeGen.Lifting ( FunDef(..) , Program(..) , printProgramWith )
-
 import Aux.Misc
+
+import CodeGen.Lifting 
+  ( Raw'(..) 
+  , Variable(..) 
+  , pattern Loc' , pattern Top' 
+  , FunDef(..) , funDefTy
+  , Program , Program'(..) 
+  , printProgramWith 
+  )
 
 --------------------------------------------------------------------------------
 
 type Context = Seq Ty
 
-pattern IFTE b x y = Pri (MkRawPrim "IFTE") [b,x,y]
+pattern IFTE' b x y = Pri' (MkRawPrim "IFTE") [b,x,y]
 
 --------------------------------------------------------------------------------
-
-type Level  = Int
-type TopLev = Int
 
 data Atom 
   = VarA !Level        -- ^ local variable (de Bruijn levels)
   | TopA !TopLev       -- ^ top-level variable
-  | KstA !Val          -- ^ literal constant
-  --  | ExtA !Int          -- ^ external input
+  | KstA !Literal      -- ^ literal constant
   deriving (Eq,Show)
 
 --------------------------------------------------------------------------------
 
-mbAtom :: Raw -> Maybe Atom
-mbAtom (Var   j) = Just (VarA j)
-mbAtom (Top   k) = Just (TopA k)
-mbAtom (Lit   x) = KstA <$> mbAtomicValue x
-mbAtom (Log _ r) = mbAtom r
+mbAtom :: Raw' -> Maybe Atom
+mbAtom (Loc' j) = Just (VarA j)
+mbAtom (Top' k) = Just (TopA k)
+mbAtom (Lit' x) = KstA <$> mbAtomicLiteral x
+-- mbAtom (Log' _ r) = mbAtom r
 mbAtom _         = Nothing
 
 -- multi-application
@@ -56,16 +58,16 @@ data Application a
   = MkApp a [a]
   deriving (Eq,Show)
 
-isApplication :: Raw -> Maybe (Application Raw)
-isApplication (Log _ body) = isApplication body
+isApplication :: Raw' -> Maybe (Application Raw')
+-- isApplication (Log' _ body) = isApplication body
 isApplication what = 
   case go what of
     (_,[]) -> Nothing
     (f,as) -> Just (MkApp f $ reverse as)
   where
-    go (App f x) = case go f of (g,xs) -> (g,x:xs) 
-    go (Log _ r) = go r
-    go t         = (t,[])
+    go (App' f xs) = case go f of (g,ys) -> (g,xs++ys) 
+--    go (Log' _  r) = go r
+    go t           = (t,[])
 
 --------------------------------------------------------------------------------
 
@@ -196,33 +198,33 @@ incNewLevel = do
 
 --------------------------------------------------------------------------------
 
-funDefToANF :: TopCtx -> FunDef Raw -> FunDef ANFE
-funDefToANF topCtx fundef@(MkFunDef idx name funTy body isFix) = MkFunDef idx name funTy body' isFix where
+funDefToANF :: TopCtx -> FunDef Raw' -> FunDef ANFE
+funDefToANF topCtx fundef@(MkFunDef idx name (MkLams funTy body)) = MkFunDef idx name (MkLams funTy body') where
   argCtx = Seq.fromList (_argTys funTy)
   body'  = toANF' topCtx argCtx body
 
-programToANF' :: TopCtx -> Program Raw -> Program ANFE
+programToANF' :: TopCtx -> Program Raw' -> Program ANFE
 programToANF' topCtx (MkProgram tops main) = MkProgram tops' main' where
   tops' = fmap (funDefToANF topCtx) tops
   main' = toANF topCtx main
 
-programToANF :: Program Raw -> Program ANFE
+programToANF :: Program Raw' -> Program ANFE
 programToANF prog@(MkProgram tops _main) = programToANF' topctx prog where
-  topctx = fmap (fromFunTy . _funType) tops
+  topctx = fmap funDefTy tops
 
 --------------------------------------------------------------------------------
 
-toANF :: TopCtx -> Raw -> ANF (Typed ExpA)
+toANF :: TopCtx -> Raw' -> ANF (Typed ExpA)
 toANF topCtx rawterm = toANF' topCtx Seq.empty rawterm
 
-toANF' :: TopCtx -> Context -> Raw -> ANF (Typed ExpA)
+toANF' :: TopCtx -> Context -> Raw' -> ANF (Typed ExpA)
 toANF' topCtx localCtx term = runReader (evalStateT (workerANF term) iniLocal) topCtx where
   arity  = Seq.length localCtx
   transl = IntMap.fromList [ (i,i) | i<-[0..arity-1] ]
   iniLocal :: Local
   iniLocal = MkLocal arity arity localCtx transl
 
-workerAtom :: Raw -> M (ANF (Typed Atom))
+workerAtom :: Raw' -> M (ANF (Typed Atom))
 workerAtom term = do
   MkANF lets1 (MkTyped ty exp1) <- workerANF term
   case exp1 of
@@ -231,61 +233,52 @@ workerAtom term = do
                     let atom = VarA j'
                     return $ MkANF (lets1 |> (MkTyped ty exp1)) (MkTyped ty atom)
 
-workerAtomList :: [Raw] -> M (ANF [Typed Atom])
+workerAtomList :: [Raw'] -> M (ANF [Typed Atom])
 workerAtomList [] = return $ MkANF Seq.empty []
 workerAtomList (this:rest) = do
   MkANF lets1 atom1 <- workerAtom     this
   MkANF lets2 atoms <- workerAtomList rest
   return $ MkANF (lets1 >< lets2) (atom1 : atoms)
 
-workerValue :: Val -> M (ANF (Typed ExpA))
-workerValue y = case isAtomicValue y of
-  True  -> return $ MkANF Seq.empty (MkTyped (valTy y) (AtmE $ KstA y)) 
+workerLiteral :: Literal -> M (ANF (Typed ExpA))
+workerLiteral y = case isAtomicLiteral y of
+  True  -> return $ MkANF Seq.empty (MkTyped (literalTy y) (AtmE $ KstA y)) 
   False -> case y of
-    StructV xs -> workerStruct xs
-    WrapV n x  -> do
-      MkANF lets (MkTyped ty atom) <- workerAtom (Lit x)
+    StructL xs -> workerStruct xs
+    WrapL n x  -> do
+      MkANF lets (MkTyped ty atom) <- workerAtom (Lit' x)
       let new = MkTyped (Named n ty) (PriE (RawWrap n) [atom])
       return $ MkANF lets new
     _ -> error $ "workerANF: a literal which is neither atomic nor a struct (2):\n  " ++ show y
 
-workerStruct :: [Val] -> M (ANF (Typed ExpA))
+workerStruct :: [Literal] -> M (ANF (Typed ExpA))
 workerStruct vals = do
-  MkANF lets tyAtoms <- workerAtomList $ map Lit vals
+  MkANF lets tyAtoms <- workerAtomList $ map Lit' vals
   let (tys,atoms) = unzipTy tyAtoms
   let ty   = Struct tys
   let expr = PriE (MkRawPrim "MkStruct") atoms
   return $ MkANF lets (MkTyped ty expr)
 
-workerANF :: Raw -> M (ANF (Typed ExpA))
+workerANF :: Raw' -> M (ANF (Typed ExpA))
 workerANF raw = withPartialReset $ unsafeWorkerANF raw
 
-unsafeWorkerANF :: Raw -> M (ANF (Typed ExpA))
+unsafeWorkerANF :: Raw' -> M (ANF (Typed ExpA))
 unsafeWorkerANF term = case term of
 
-  Lit y -> workerValue y
-{-
-  Lit y -> case isAtomicValue y of
-    True  -> return $ MkANF Seq.empty (MkTyped (valTy y) (AtmE $ KstA y)) 
-    False -> case y of
-      StructV xs -> workerStruct xs
-      Named _ x
-      _ -> error "workerANF: a literal which is neither atomic nor a struct (1)"
--}
+  Lit' y -> workerLiteral y
 
-
-  Var j -> do
+  Loc' j -> do
     ty <- typeOfLocalVar j
     j' <- lookupNewLevel j
     return $ MkANF Seq.empty (MkTyped ty (AtmE $ VarA j'))
 
-  Top k -> do
+  Top' k -> do
     ty <- typeOfTopVar k
     return $ MkANF Seq.empty (MkTyped ty (AtmE $ TopA k)) 
 
-  Log _name body -> workerANF body
+  -- Log' _name body -> workerANF body
 
-  Let ty rhs body -> do
+  Let' ty rhs body -> do
     MkANF lets1 (MkTyped ty1 exp1) <- workerANF rhs
     unless (ty == ty1) $ error "workerANF: Let bound type is inconsistent"
     MkLocal oldLevel newLevel ctx levelMap <- get
@@ -298,7 +291,7 @@ unsafeWorkerANF term = case term of
     MkANF lets2 tyExp2 <- workerANF body
     return $ MkANF ((lets1 |> (MkTyped ty1 exp1)) >< lets2) tyExp2
 
-  App {} -> case isApplication term of
+  App' {} -> case isApplication term of
     Nothing -> error "workerANF: this should never happen"
     Just (MkApp fun args) -> do 
       MkANF lets1 (MkTyped funTy funAtom) <- workerAtom fun
@@ -318,7 +311,7 @@ unsafeWorkerANF term = case term of
                         in  error $ "workerANF: application resulting in a function type\n" ++ info
           _          -> return $ MkANF (lets1 >< lets2) (MkTyped retTy (AppE top1 argAtoms))
 
-  IFTE cond trueBr falseBr -> do
+  IFTE' cond trueBr falseBr -> do
     MkANF lets1 (MkTyped condTy cond1) <- workerAtom cond
     unless (condTy == Bit) $ error "workerANF: condition in `if` is expected to have type `Bit`" 
     trueBranch1  <- withCompleteReset $ workerANF trueBr
@@ -329,7 +322,7 @@ unsafeWorkerANF term = case term of
     let ifte = IftE cond1 trueBranch1 falseBranch1
     return $ MkANF lets1 (MkTyped trueTy ifte)
 
-  Pri op args -> do
+  Pri' op args -> do
     MkANF lets1 typedAtoms <- workerAtomList args
     let (tys, atoms) = unzipTy typedAtoms
     let retTy = primOpTy op tys

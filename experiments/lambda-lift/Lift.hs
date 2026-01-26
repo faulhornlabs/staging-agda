@@ -42,7 +42,6 @@ data Exp where
   Var' :: Variable      -> Exp
   App' :: Exp -> [Exp]  -> Exp
   Let' :: Exp -> Exp    -> Exp
-  Rec' :: Exp -> Exp    -> Exp
   Pri' :: PrimOp Exp    -> Exp
   Lit' :: Int           -> Exp
   deriving Show
@@ -77,14 +76,6 @@ prettyExp = go where
                     . go  level    (let_prec+1) rhs
                     . showString " in "
                     . go (level+1) (let_prec+1) body 
-
-    Rec' rhs body  -> showParen (d > let_prec) 
-                    $ showString "letrec "
-                    . prettyS (Loc level)
-                    . showString " = "
-                    . go (level+1) (let_prec+1) rhs
-                    . showString " in "
-                    . go (level+1) (let_prec+1) body 
                     
 instance Pretty (TopLev, FunDef) where
   pretty (k, MkFunDef n body) = 
@@ -116,7 +107,6 @@ freeVarSet' threshold curLevel expr = execState (go curLevel expr) Set.empty whe
     Top' k         -> return ()
     App' fun args  -> go  level   fun  >> mapM_ (go level) args
     Let' rhs body  -> go  level    rhs  >> go (level+1) body
-    Rec' rhs body  -> go (level+1) rhs  >> go (level+1) body
     Pri' op        -> mapM_ (go level) op
     Lit' k         -> return ()
 
@@ -144,7 +134,6 @@ replaceVar' replace = go where
   go (Var' var ) = case var of { Top k -> Top' k ; Loc j -> replace j }
   go (App' f xs) = App' (go f) (map go xs)
   go (Let' r b ) = Let' (go r) (go b)
-  go (Rec' r b ) = Rec' (go r) (go b)
   go (Pri' op  ) = Pri' (fmap go op)
   go (Lit' k   ) = Lit' k
 
@@ -321,7 +310,6 @@ evalProg (MkProg topEnv main) = eval Seq.empty main where
       Top k          -> evalFun (Seq.index topEnv k)
     App' fun arg   -> valApps (eval env fun) (map (eval env) arg)
     Let' rhs body  -> let x = eval  env       rhs in eval (env |> x) body
-    Rec' rhs body  -> let f = eval (env |> f) rhs in eval (env |> f) body
     Pri' op        -> evalPrimOp $ fmap (eval env) op
     Lit' k         -> VInt k
 

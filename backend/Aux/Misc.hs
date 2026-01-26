@@ -6,6 +6,24 @@ module Aux.Misc where
 import Data.Word
 
 import Debug.Trace
+import Text.Show.Pretty
+
+--------------------------------------------------------------------------------
+
+type Level  = Int
+type TopLev = Int
+type NArgs  = Int
+
+--------------------------------------------------------------------------------
+-- multi-lambdas and multi-applications
+
+data Lams ty body
+  = MkLams ty body
+  deriving Show
+
+data Apps f arg
+  = MkApps f [arg]
+  deriving Show
 
 --------------------------------------------------------------------------------
 
@@ -13,9 +31,17 @@ debug' :: Show a => Bool -> String -> a -> b -> b
 debug' lf s x y = trace (newline ++ ">>> " ++ s ++ " = " ++ show x) y where
   newline = if lf then "\n" else ""
 
-debug, debugln :: Show a => String -> a -> b -> b
+debug, debugLn :: Show a => String -> a -> b -> b
 debug   = debug' False
-debugln = debug' True
+debugLn = debug' True
+
+debugNice' :: Show a => Bool -> String -> a -> b -> b
+debugNice' lf s x y = trace (newline ++ ">>> " ++ s ++ " = " ++ ppShow x) y where
+  newline = if lf then "\n" else ""
+
+debugNice, debugNiceLn :: Show a => String -> a -> b -> b
+debugNice   = debugNice' False
+debugNiceLn = debugNice' True
 
 --------------------------------------------------------------------------------
 
