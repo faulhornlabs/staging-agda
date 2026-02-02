@@ -19,7 +19,7 @@ data Ty
   = Arrow Ty Ty 
   | NatT
   | BoolT
-  deriving (Eq,Show)
+  deriving (Eq,Ord,Show)
 
 infixr 1 ~>
 (~>) :: Ty -> Ty -> Ty
@@ -41,7 +41,6 @@ showTy = go 0 where
 inParens :: Bool -> String -> String
 inParens False s = s
 inParens True  s = "(" ++ s ++ ")"
-
 
 ----------------------------------------
 -- *** function signatures
@@ -71,6 +70,10 @@ ctxLevel = seqLength
 
 ctxToList :: Ctx -> [Ty]
 ctxToList = seqToList
+
+infixl 5 |>>
+(|>>) :: Ctx -> Sig -> Ctx
+(|>>) ctx (MkSig args _ret) = ctx <> args
 
 --------------------------------------------------------------------------------
 -- *** literals
@@ -121,10 +124,10 @@ primOpTy op = case op of
 
 -- a (top-level) function can have several arguments
 data Fun exp = MkFun 
-  { sig  :: Sig
-  , body :: exp 
+  { funSig  :: Sig
+  , funBody :: exp 
   }
-  deriving Show
+  deriving (Show,Functor)
 
 pattern Fun_ args ret body = MkFun (MkSig args ret) body
 
@@ -138,8 +141,8 @@ funTy (MkFun sig _body) = sigToTy sig
 -- *** multi-application
 
 data Apply fun arg = MkApp
-  { func :: fun
-  , args :: Seq arg
+  { appFunc :: fun
+  , appArgs :: Seq arg
   }
   deriving Show
 

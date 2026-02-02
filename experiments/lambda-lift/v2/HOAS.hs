@@ -8,6 +8,7 @@ module HOAS where
 
 import Seq
 import Common
+import Val
 
 import qualified Term 
 
@@ -59,5 +60,32 @@ fromHOAS = go emptyCtx where
     where 
       level = ctxLevel ctx
       v     = Var level
+
+--------------------------------------------------------------------------------
+-- *** evaluate
+
+evalHOAS :: Obj -> Val
+evalHOAS = eval where
+
+  norm :: Obj -> Obj
+  norm = quote . eval 
+
+  eval :: Obj -> Val
+  eval obj = case obj of
+    App fun arg    -> valApp (eval fun) (eval arg)
+    Lam t fun      -> VLam t \x -> eval (fun (quote x))
+    Let   rhs body -> eval $ body (norm rhs)
+    Rec s rhs body -> case eval (Lam s rhs) of { VLam t f -> eval $ body (quote (fix f)) }
+    Pri op         -> evalPrimOp $ fmap eval op
+    Lit y          -> litToVal y
+    Var _          -> error "evalHOAS: Var (shouldn't happen)"
+
+  quote :: Val -> Obj
+  quote (VBool  b) = Lit (BoolL b)
+  quote (VNat   k) = Lit (NatL  k)
+  quote (VLam t f) = Lam t \obj -> quote (f (eval obj))
+
+  fix :: (a -> a) -> a
+  fix f = let x = f x in x
 
 --------------------------------------------------------------------------------

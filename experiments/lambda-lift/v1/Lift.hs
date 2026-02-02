@@ -140,8 +140,8 @@ replaceVar' replace = go where
 replaceVar :: Replace Level Exp -> Exp -> Exp
 replaceVar (old :~> new) = replaceVar' (\j -> if j == old then new else Loc' j)
 
-replaceVarFunDef :: Replace Level Exp -> FunDef -> FunDef
-replaceVarFunDef replace (MkFunDef n body) = MkFunDef n (replaceVar replace body)
+-- replaceVarFunDef :: Replace Level Exp -> FunDef -> FunDef
+-- replaceVarFunDef replace (MkFunDef n body) = MkFunDef n (replaceVar replace body)
 
 --------------------------------------------------------------------------------
 -- *** lambda-lift monad

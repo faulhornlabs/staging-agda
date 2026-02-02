@@ -1,11 +1,12 @@
 
-{-# LANGUAGE GADTSyntax, StandaloneDeriving, PatternSynonyms #-}
+{-# LANGUAGE BlockArguments, GADTSyntax, StandaloneDeriving, PatternSynonyms #-}
 module Term where
 
 --------------------------------------------------------------------------------
 
 import Seq
 import Common
+import Val
 
 --------------------------------------------------------------------------------
 -- *** source terms
@@ -53,6 +54,7 @@ inferTy = go where
     Pri op  -> primOpTy (fmap (go ctx) op)
 
 --------------------------------------------------------------------------------
+-- *** recognize multi-lam and multi-app
 
 isLambda :: Ctx -> Tm -> Maybe (Fun Tm)
 isLambda ctx term = case term of
@@ -77,53 +79,19 @@ isApp_ = go where
   go term      = MkApp term emptySeq
 
 --------------------------------------------------------------------------------
--- *** terms after some preprocessing
+-- *** evaluate
 
-data Tm' where
-  Var' :: Level                -> Tm'      -- ^ variable
-  App' :: Apply Level Tm'      -> Tm'      -- ^ application to a variable
-  Let' :: Ty -> Tm'     -> Tm' -> Tm'      -- ^ let binding an expression
-  Fun' :: Ty -> Fun Tm' -> Tm' -> Tm'      -- ^ let binding a function
-  Rec' :: Ty -> Fun Tm' -> Tm' -> Tm'      -- ^ recursive let binding
-  Pri' :: PrimOp Tm'           -> Tm'
-  Lit' :: Literal              -> Tm'
+evalTm :: Tm -> Val
+evalTm = go emptySeq where
 
-deriving instance Show Tm'
-
-preprocess :: Tm -> Tm'
-preprocess = go emptyCtx where
- 
-  go :: Ctx -> Tm -> Tm'
-  go ctx term = case term of
-
-    Var j  -> Var' j
-
-    App {} -> case isApp_ term of
-      MkApp fun args -> case go ctx fun of
-        Var'        j     -> App' (MkApp j $       fmap (go ctx) args)
-        App' (MkApp j xs) -> App' (MkApp j $ xs <> fmap (go ctx) args)
-
-    Lam {} -> case isLambda_ ctx term of
-      fun@(Fun_ ts ret body) -> 
-        let body' = go (ctx <> ts) body
-        in Fun' (funTy fun) (Fun_ ts ret body') (Var' (ctxLevel ctx))
-
-    Let t rhs letbody -> if not (isArrow t)
-      then Let' t (go ctx rhs) (go (ctx |> t) letbody)
-      else case isLambda_ ctx rhs of
-        fun@(Fun_ ts ret funbody) -> 
-          let funbody' = go (ctx <> ts) funbody
-              letbody' = go (ctx |> t ) letbody 
-          in  Fun' (funTy fun) (Fun_ ts ret funbody') letbody'
-
-    Rec t rhs letbody -> case isLambda_ (ctx |> t) rhs of
-      fun@(Fun_ ts ret funbody) -> 
-        let funbody' = go ((ctx |> t) <> ts) funbody
-            letbody' = go ( ctx |> t       ) letbody 
-        in  Rec' (funTy fun) (Fun_ ts ret funbody') letbody'
-
-    Lit y  -> Lit' y
-
-    Pri op -> Pri' (fmap (go ctx) op)
+  go :: Env -> Tm -> Val
+  go env term = case term of
+    Var j          -> seqIndex env j
+    App f x        -> valApp (go env f) (go env x)
+    Lam t body     -> VLam t \x -> go (env |> x) body
+    Let s rhs body -> let x = go  env       rhs in go (env |> x) body
+    Rec s rhs body -> let f = go (env |> f) rhs in go (env |> f) body
+    Pri op         -> evalPrimOp $ fmap (go env) op
+    Lit y          -> litToVal y
 
 --------------------------------------------------------------------------------
