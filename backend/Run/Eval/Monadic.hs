@@ -87,10 +87,12 @@ evalInEnv = go where
 
     Log _ body -> go env body
 
+{-
     Dbg name ty x y -> do
       x' <- go env x
       debugPrint name x'
       go env y
+-}
 
   -- lazy primitives mess up stuff...
 
@@ -133,44 +135,44 @@ debugPrint name x = debugPutStrLn $ ">>> " ++ name ++ " = " ++ show x
 
 --------------------------------------------------------------------------------
 
-evalInTopEnv :: Seq (FunDef Raw') -> Env -> Raw' -> IO Val
+evalInTopEnv :: Seq (FunDef RawExp) -> Env -> RawExp -> IO Val
 evalInTopEnv topEnv = go where
 
-  go ::  Env -> Raw' -> IO Val
+  go ::  Env -> RawExp -> IO Val
   go env term = do
     value <- go' env term 
     forceVal value
 
   -- we need to evaluate a top-level function into a lambda value
-  goFunDef :: FunDef Raw' -> IO Val
+  goFunDef :: FunDef RawExp -> IO Val
   goFunDef (MkFunDef _i _name (MkLams (MkFunTy argTys retTy) body)) = do
     let nargs = length argTys
     mkMultiFunVal nargs (\argSeq -> go argSeq body)
 
-  go' ::  Env -> Raw' -> IO Val
+  go' ::  Env -> RawExp -> IO Val
   go' env term = case term of
 
-    App' fun args -> do
-      fun' <- go env fun
+    LocE j -> return (Seq.index env j)
+
+    TopE k -> goFunDef (Seq.index topEnv k)
+
+    LitE lit -> return (literalToVal lit)
+
+    AppE fun args -> do
+      fun' <- go env (VarE fun)
       case fun' of
         Fun f -> do { args' <- mapM (go env) args ; valApps fun' args' }
         _     -> error "evalInTopEnvM: application to a non-lambda"
 
-    Let' _ty rhs body -> do
+    LetE _ty rhs letbody -> do
       rhs' <- go env rhs
-      go (env |> rhs') body
+      go (env |> rhs') letbody
 
-    Pri' op@(MkRawPrim name) args -> case isLazyPrim name of
+    PriE op@(MkRawPrim name) args -> case isLazyPrim name of
       True  -> lazyPrim   env name args
       False -> normalPrim env op   args
-    Pri' op args -> normalPrim env op args
+    PriE op args -> normalPrim env op args
 
-    Lit' lit -> return (literalToVal lit)
-
-    Loc' j -> return (Seq.index env j)
-
---    Top' k -> evalInEnv Seq.empty $ funDefToLam (Seq.index topEnv k)
-    Top' k -> goFunDef (Seq.index topEnv k)
 
 {-
     Log' _ body -> go env body
@@ -189,12 +191,12 @@ evalInTopEnv topEnv = go where
   isLazyPrim "IFTE" = True
   isLazyPrim _      = False
 
-  normalPrim :: Env -> RawPrim -> [Raw'] -> IO Val
+  normalPrim :: Env -> RawPrim -> [RawExp] -> IO Val
   normalPrim env op args = do
     ys <- mapM (go env) args 
     evalPrimOpMonadic (MkPrim op ys)
 
-  lazyPrim :: Env -> String -> [Raw'] -> IO Val
+  lazyPrim :: Env -> String -> [RawExp] -> IO Val
   lazyPrim env name args = case name of
     "And"   -> lazyAnd env args
     "Or"    -> lazyOr  env args
@@ -214,12 +216,12 @@ evalInTopEnv topEnv = go where
 
 --------------------------------------------------------------------------------
 
-runProgram' :: Program Raw' -> IO Val
+runProgram' :: Program RawExp -> IO Val
 runProgram' (MkProgram tops main) = evalInTopEnv tops Seq.empty main
 
-runProgram :: Program Raw' -> IO Val
+runProgram :: Program RawExp -> IO Val
 runProgram origProgram@(MkProgram tops origMain) = do
-  let ty = inferTyRaw' (fmap funDefTy tops) Seq.empty origMain
+  let ty = inferTyRawExp (fmap funDefTy tops) Seq.empty origMain
   case ty of
     Arrow Token pair -> do
       putStrLn "runProgram: input is IO action"
@@ -232,7 +234,7 @@ runProgram origProgram@(MkProgram tops origMain) = do
       putStrLn "runProgram: input is pure"
       runProgram' origProgram
 
-runProgramWithInputs :: Inputs -> Program Raw' -> IO (Outputs, Val)
+runProgramWithInputs :: Inputs -> Program RawExp -> IO (Outputs, Val)
 runProgramWithInputs inputs prg = runWithInputs inputs $ runProgram prg
 
 
@@ -290,17 +292,17 @@ evalAnfInEnv topEnv = goANF where
   goExp :: Env -> ExpA -> IO Val
   goExp env expr = case expr of
 
-    AtmE atom -> goAtom env atom
+    AtmA atom -> goAtom env atom
 
-    AppE topIdx args     -> do
+    AppA topIdx args     -> do
       args' <- mapM (goAtom env) args
       goApp env (Seq.index topEnv topIdx) args'
 
-    PriE op args         -> do
+    PriA op args         -> do
       args' <- mapM (goAtom env) args
       evalPrimOpMonadic (MkPrim op args')
 
-    IftE cond tbr fbr    -> do
+    IftA cond tbr fbr    -> do
       cond' <- goAtom env cond
       goIfte env cond' tbr fbr
 

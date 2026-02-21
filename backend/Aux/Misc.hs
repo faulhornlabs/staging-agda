@@ -12,18 +12,31 @@ import Text.Show.Pretty
 
 type Level  = Int
 type TopLev = Int
-type NArgs  = Int
+type Arity  = Int
+type NArgs  = Arity
 
 --------------------------------------------------------------------------------
 -- multi-lambdas and multi-applications
 
 data Lams ty body
   = MkLams ty body
-  deriving Show
+  deriving (Show,Functor)
+
+lamsTy :: Lams ty body -> ty
+lamsTy (MkLams ty _) = ty
+
+lamsBody :: Lams ty body -> body
+lamsBody (MkLams _ body) = body
 
 data Apps f arg
   = MkApps f [arg]
   deriving Show
+
+appsHead :: Apps f arg -> f
+appsHead (MkApps hd _) = hd
+
+appsArgs :: Apps f arg -> [arg]
+appsArgs (MkApps _ args) = args
 
 --------------------------------------------------------------------------------
 

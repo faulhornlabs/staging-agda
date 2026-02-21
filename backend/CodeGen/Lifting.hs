@@ -1,33 +1,35 @@
 
 -- lambda lifting
 
-{-# LANGUAGE PatternSynonyms, BlockArguments #-}
+{-# LANGUAGE PatternSynonyms, BlockArguments, RecordWildCards, StrictData, DeriveFunctor #-}
 module CodeGen.Lifting where
 
 --------------------------------------------------------------------------------
 
 import Data.List
+import Data.Maybe
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.State.Strict
-
-import Data.Maybe
+import System.IO.Unsafe
 
 import qualified Data.Set      as Set ; import Data.Set      ( Set )
 import qualified Data.Map      as Map ; import Data.Map      ( Map )
 import qualified Data.Sequence as Seq ; import Data.Sequence ( Seq , (<|) , (|>) , (><) )
 import qualified Data.Foldable as F
 
-import Text.Show.Pretty ( ppShow )
+import Text.Show.Pretty ( ppShow , pPrint )
 
 import AST.Ty
 import AST.Val
 import AST.PrimOp
 import AST.IO
+import AST.Literal
 
-import AST.Term hiding ( Top )
-import qualified AST.Term
+-- import AST.Term hiding ( Top )
+-- import qualified AST.Term
+import CodeGen.Preprocess ( Tm'(..) , freeVarMap )
 
 import Aux.Misc
 
@@ -36,80 +38,81 @@ import Aux.Misc
 seqToList :: Seq a -> [a]
 seqToList = F.toList
 
+seqConcat :: Seq (Seq a) -> Seq a
+seqConcat = mconcat . seqToList
+
 --------------------------------------------------------------------------------
 
-data Variable
+type TopIdx = Int
+
+data Variable top
   = Loc Level     -- local variable
-  | Top TopLev    -- top-level variable
-  deriving (Eq,Show)
+  | Top top       -- top-level variable
+  deriving (Eq,Show,Functor)
 
 -- After the lifting transformation, @lambda@-s, @letrec@-s and even @let@-s 
 -- where the defined value is a function are all eliminated. 
 --
 -- To simplify things we also eliminate @Log@ and @Dbg@ (which are ugly hacks anyway)
-data Raw' where
-  Var' :: Variable               -> Raw'
-  App' :: Raw' -> [Raw']         -> Raw'
-  Let' :: Ty -> Raw' -> Raw'     -> Raw'
-  Pri' :: RawPrim -> [Raw']      -> Raw'
-  Lit' :: Literal                -> Raw'
+data RawExp' top  where
+  VarE :: Variable top                     -> RawExp' top     -- better pretty-printing this way...
+  AppE :: Variable top -> [RawExp' top]    -> RawExp' top
+  LetE :: Ty -> RawExp' top -> RawExp' top -> RawExp' top
+  PriE :: RawPrim -> [RawExp' top]         -> RawExp' top
+  LitE :: Literal                          -> RawExp' top
   -- hacks...
---  Log' :: String -> Raw' -> Raw'                -- ^ give name to things for debugging etc
---  Dbg' :: String -> Ty -> Raw' -> Raw' -> Raw'  -- ^ printf debugging support
-  deriving Show
+--  LogE :: String ->                 RawExp' -> RawExp' -- ^ give name to things for debugging etc
+--  DbgE :: String -> Ty -> RawExp' -> RawExp' -> RawExp'  -- ^ printf debugging support
+  deriving (Show,Functor)
 
-pattern Loc' j = Var' (Loc j)
-pattern Top' k = Var' (Top k)
+type RawExp = RawExp' TopIdx
 
-{-
-quoteRaw' :: Raw' -> Raw
-quoteRaw' = go where
-  go (Loc' j)           = Var j
-  go (Top' k)           = AST.Term.Top k
-  go (App' f xs)        = appList (go f) (map go xs)
-  go (Lit' l)           = Lit l
-  go (Let' ty rhs body) = Let ty (go rhs) (go body)
-  go (Pri' op args    ) = Pri op (map go args)
+-- pattern VarE v = AppE v []
+pattern LocE j = VarE (Loc j)
+pattern TopE k = VarE (Top k)
 
-funDefToLam :: FunDef Raw' -> Raw
-funDefToLam (MkFunDef _ _ (MkLams (MkFunTy args _) body)) = go args
-  where
-    go []     = quoteRaw' body
-    go (t:ts) = Lam t (go ts)
--}
+appsE :: Apps (Variable top) (RawExp' top) -> [RawExp' top] -> RawExp' top
+appsE (MkApps variable args1) args2 = case (args1 ++ args2) of
+  []   -> VarE variable
+  args -> AppE variable args
 
 --------------------------------------------------------------------------------
 
-inferTyRaw' :: Ctx -> Ctx -> Raw' -> Ty
-inferTyRaw' topEnv = go where
+inferTyRawExp :: TopCtx -> Ctx -> RawExp -> Ty
+inferTyRawExp topEnv = go where
 
-  go :: Ctx -> Raw' -> Ty
+  goVar :: Ctx -> Variable TopIdx -> Ty
+  goVar localEnv var = case var of
+
+    Loc j -> case Seq.lookup j localEnv of 
+      Just ty -> ty 
+      Nothing -> error $ "inferTyRawExp': local variable " ++ show j ++ " not found in local context"
+
+    Top k -> case Seq.lookup k topEnv of 
+      Just ty -> ty 
+      Nothing -> error $ "inferTyRawExp': top level variable " ++ show k ++ " not found in top level context"
+
+  go :: Ctx -> RawExp  -> Ty
   go localEnv term = case term of
 
-    Loc' j -> case Seq.lookup j localEnv of 
-      Just ty -> ty 
-      Nothing -> error $ "inferTyRaw': local variable " ++ show j ++ " not found in local context"
-
-    Top' k -> case Seq.lookup k topEnv of 
-      Just ty -> ty 
-      Nothing -> error $ "inferTyRaw': top level variable " ++ show k ++ " not found in top level context"
-
-    Let' t rhs body -> 
+    VarE v -> goVar localEnv v
+    
+    LetE t rhs body -> 
       let t' = go localEnv rhs 
       in  if t' == t 
             then go (localEnv |> t) body
-            else error $ "inferTyRaw': inconsistent let binding type: " ++ show t' ++ " vs. " ++ show t
+            else error $ "inferTyRawExp': inconsistent let binding type: " ++ show t' ++ " vs. " ++ show t
 
-    App' fun []   -> go localEnv fun
-    App' fun args -> case isFunctionTy (go localEnv fun) of
+    AppE fun []   -> goVar localEnv fun
+    AppE fun args -> case isFunctionTy (goVar localEnv fun) of
       Just (MkFunTy argTys retTy) -> if map (go localEnv) args == argTys 
         then retTy 
-        else error "inferTyRaw': incompatible function (multi-)application"
-      _ -> error "inferTyRaw': application to a non-lambda"
+        else error "inferTyRawExp': incompatible function (multi-)application"
+      _ -> error "inferTyRawExp': application to a non-lambda"
 
-    Pri' op args -> primOpTy op (map (go localEnv) args)
+    PriE op args -> primOpTy op (map (go localEnv) args)
 
-    Lit' lit -> literalTy lit
+    LitE lit -> literalTy lit
 
 --------------------------------------------------------------------------------
 
@@ -150,19 +153,21 @@ instance Pretty (TopLev, FunDef) where
 
 --------------------------------------------------------------------------------
 
-data FunDef expr = MkFunDef
-  { _funIdx  :: !TopLev               -- ^ top-level index of the function 
-  , _funName :: !String               -- ^ name of the function
-  , _funBody :: !(Lams FunTy expr)    -- ^ function body
+data FunDef' top expr = MkFunDef
+  { _funIdx  :: top                  -- ^ top-level index of the function 
+  , _funName :: String               -- ^ name of the function
+  , _funBody :: (Lams FunTy expr)    -- ^ function body
   }
-  deriving Show
+  deriving (Show,Functor)
+
+type FunDef = FunDef' TopIdx
 
 -- | type signature of the function
-_funType :: FunDef expr -> FunTy      
+_funType :: FunDef' top expr -> FunTy      
 _funType def = case _funBody def of
   MkLams funty _ -> funty
 
-funDefTy :: FunDef expr -> Ty
+funDefTy :: FunDef' top expr -> Ty
 funDefTy = fromFunTy . _funType
 
 data Program' def main
@@ -178,19 +183,19 @@ instance Pretty (Prog FunDef Exp) where
     body = "main = " ++ pretty main
 -}
 
-printFunDefWith :: (a -> String) -> FunDef a -> IO ()
-printFunDefWith userShow (MkFunDef idx name (MkLams (MkFunTy argsTy retTy) body)) = do
-  putStrLn $ "\n" ++ show idx ++ ": def " ++ show name
+printFunDefWith :: (idx -> String) -> (a -> String) -> FunDef' idx a -> IO ()
+printFunDefWith userShowIdx userShow (MkFunDef idx name (MkLams (MkFunTy argsTy retTy) body)) = do
+  putStrLn $ "\n" ++ userShowIdx idx ++ ": def " ++ show name
   putStrLn $ " :: " ++ show argsTy ++ " -> " ++ show retTy
   putStrLn $ " = "
   putStrLn (userShow body)
 
-printFunDef :: Show a => FunDef a -> IO ()
-printFunDef = printFunDefWith show 
+printFunDef :: (Show idx, Show a) => FunDef' idx a -> IO ()
+printFunDef = printFunDefWith show show
 
 printProgramWith :: (a -> String) -> Program a -> IO ()
 printProgramWith userShow (MkProgram tops main) = do
-  mapM_ (printFunDefWith userShow) (F.toList tops)
+  mapM_ (printFunDefWith show userShow) (F.toList tops)
   putStrLn ""
   putStrLn (userShow main)
 
@@ -198,59 +203,75 @@ printProgram :: Show a => Program a -> IO ()
 printProgram = printProgramWith ppShow -- show
 
 --------------------------------------------------------------------------------
--- ** free variables
+-- ** naming convention matching...
 
-type Tm  = Raw
-type Exp = Raw'
+type Tm      = Tm'
+type Exp     = RawExp'  TreeIdx
+type FunDef_ = FunDef' TreeIdx Exp
+type Ignore  = Set Level
+type Fun a   = Lams FunTy a
 
-type FunDef_ = FunDef Exp
-
-freeVarSet' :: Level -> Ctx -> Exp -> Set (Level,Ty)
-freeVarSet' threshold ctx expr = execState (go ctx expr) Set.empty where
-  go :: Ctx -> Exp -> State (Set (Level,Ty)) ()
-  go ctx expr = case expr of
-    Loc' j            -> if j < threshold 
-                           then modify (Set.insert (j, ctxLkp ctx j)) 
-                           else return ()
-    Top' k            -> return ()
-    App' fun args     -> go  ctx        fun  >> mapM_ (go ctx) args
-    Let' ty rhs body  -> go  ctx        rhs  >> go (ctx |> ty) body
-    Pri' op args      -> mapM_ (go ctx) args
-    Lit' k            -> return ()
-    --
---    Log' n x          -> go ctx x
---    Dbg' n t x y      -> go ctx x >> go ctx y 
-
-freeVarMap' :: Level -> Ctx -> Exp -> (Map Level Level, Seq Ty)
-freeVarMap' threshold level expr = (tbl, tys) where
-  set = freeVarSet' threshold level expr
-  lts = Set.toList set :: [(Level,Ty)]
-  tbl = Map.fromList $ zip (map fst lts) [0..]
-  tys = Seq.fromList $ map snd lts
-
-freeVarSet :: Ctx -> Exp -> Set (Level,Ty)
-freeVarSet ctx = freeVarSet' (ctxToLevel ctx) ctx
-
-freeVarMap :: Ctx -> Exp -> (Map Level Level, Seq Ty)
-freeVarMap ctx = freeVarMap' (ctxToLevel ctx) ctx
+pattern MkFun sig body = MkLams sig body
 
 --------------------------------------------------------------------------------
+-- * replace tree indexing with flat array indexing
 
+type FunDefRaw top = FunDef' top (RawExp' top)
+type Prog'     top = Program' (FunDefRaw top) (RawExp' top)
+
+replaceTreeIdxs :: Prog' TreeIdx -> Prog' TopIdx
+replaceTreeIdxs (MkProgram oldSeq oldMain) = MkProgram newSeq newMain where
+
+  oldIdxs = [ _funIdx funDef | funDef <- seqToList oldSeq ]
+  table   = Map.fromList $ zip oldIdxs [0..]
+
+  newSeq  = fmap mapFunDef oldSeq
+  newMain = fmap h oldMain
+ 
+  mapFunDef (MkFunDef    idx  name (MkLams sig         body )) = 
+             MkFunDef (h idx) name (MkLams sig (fmap h body))
+
+  h :: TreeIdx -> TopIdx
+  h old = case Map.lookup old table of
+    Just new -> new
+    Nothing  -> error "replaceTreeIdxs: should not happen"
+
+--------------------------------------------------------------------------------
+-- ** replacing variables
+
+data Replacement
+  = VarR Level
+  | AppR (Apps TreeIdx Level)
+  deriving Show
+
+pattern AppR_ idx args = AppR (MkApps idx args)
+
+replaceVars :: (Level -> Replacement) -> Exp -> Exp
+replaceVars replace = go where
+
+  goVar :: Variable TreeIdx -> Replacement
+  goVar var = case var of 
+    Loc j -> replace j
+    Top k -> AppR_ k []
+
+  go :: Exp -> Exp
+  go (LetE t r b) = LetE t (go r) (go b)
+  go (PriE op as) = PriE op (map go as)
+  go (LitE k    ) = LitE k
+  go (AppE f xs ) = case goVar f of
+    VarR  j           -> AppE  (Loc j)                  (map go xs)
+    AppR_ k args      -> AppE  (Top k) (map LocE args ++ map go xs)
+  go (VarE v    ) = case goVar v of
+    VarR  j           -> VarE  (Loc j) 
+    AppR_ k args      -> AppE  (Top k) (map LocE args)
+
+fromCapture :: Capture -> Exp
+fromCapture (MkApps k captured) = AppE (Top k) (map LocE captured)
+
+{-
 data Replace a b 
   = a :~> b
   deriving Show
-
-replaceVar' :: (Level -> Exp) -> Exp -> Exp
-replaceVar' replace = go where
-  go :: Exp -> Exp
-  go (Var' var  ) = case var of { Top k -> Top' k ; Loc j -> replace j }
-  go (App' f xs ) = App' (go f) (map go xs)
-  go (Let' t r b) = Let' t (go r) (go b)
-  go (Pri' op as) = Pri' op (map go as)
-  go (Lit' k    ) = Lit' k
-  --
---  go (Log' n x    ) =  Log' n   (go x)
---  go (Dbg' n t x y) =  Dbg' n t (go x) (go y)
 
 replaceVar :: Replace Level Exp -> Exp -> Exp
 replaceVar (old :~> new) = replaceVar' (\j -> if j == old then new else Loc' j)
@@ -258,48 +279,199 @@ replaceVar (old :~> new) = replaceVar' (\j -> if j == old then new else Loc' j)
 replaceVarFunDef :: Replace Level Exp -> FunDef_ -> FunDef_
 replaceVarFunDef replace (MkFunDef i n (MkLams fty body)) = 
                           MkFunDef i n (MkLams fty $ replaceVar replace body)
+-}
 
 --------------------------------------------------------------------------------
 -- *** lambda-lift monad
 
-type LiftM a = State (Seq FunDef_) a
+-- REVERSE ORDER!
+type TreeIdx = [Int]
 
-addNew' :: (TopLev -> FunDef_) -> LiftM TopLev
-addNew' what = do
-  old <- get
-  let n = Seq.length old
-  put (old |> what n)
-  return n
+treeIdxToIdentPostfix :: TreeIdx -> String
+treeIdxToIdentPostfix treeidx = intercalate "_" (map show $ reverse treeidx)
 
--- addNew :: FunDef_ -> LiftM TopLev
--- addNew what = addNew' (\i -> what { _funIdx = i})     
+type Stack a 
+  = Seq (Node a)
 
-applyAt :: TopLev -> (FunDef_ -> FunDef_) -> LiftM ()
-applyAt idx f = modify (Seq.adjust' f idx)
+data Node a 
+  = Leaf a 
+  | Node a (Stack a)
+  deriving Show
+
+-- NOTE! sub-stacks come _before_ the entry!
+flattenStack :: Stack a -> Seq a
+flattenStack = goSeq where
+
+  goSeq :: Seq (Node a) -> Seq a
+  goSeq xs = seqConcat (fmap goNode xs)
+
+  goNode :: Node a -> Seq a
+  goNode node = case node of
+    Leaf a     -> Seq.singleton a
+    Node a sub -> goSeq sub |> a
+
+type Def = FunDef_
+
+type LiftM a = StateT [Stack Def] IO a
+-- type LiftM a = State [Stack Def] a
+
+emptySeq  = Seq.empty
+seqLength = Seq.length
+
+initialState :: [Stack Def]
+initialState = [emptySeq]
+
+{-
+addTopLevel :: (TreeIdx -> LiftM (Def,a)) -> LiftM a
+addTopLevel user = do
+  stack@(this:rest) <- get
+  let ks = map seqLength stack
+  (new, out) <- user ks
+  let this' = this |> Leaf new
+  put (this':rest)
+  return out
+-}
+
+-- State monad is not MonadFail, hence this hackety hack
+getHeadTail :: LiftM (Stack Def, [Stack Def])
+getHeadTail = do
+  list <- get
+  case list of
+    []          -> error "LiftM/getHeadTail: empty"
+    (this:rest) -> return (this, rest)
+
+enter :: (TreeIdx -> LiftM (Def,a)) -> LiftM a
+enter user = do
+  (this,rest) <- getHeadTail
+  let stack = (this:rest)
+  let ks = map seqLength stack
+  put (emptySeq:stack)
+  (new, out) <- user ks
+  (inner, outer) <- getHeadTail
+  case outer of 
+    []          -> error "LiftM/enter: fatal: should not happen"
+    (this:rest) -> do
+      let this' = this |> Node new inner
+      put (this':rest)
+      return out
 
 ----------------------------------------
 
 -- when we lift something to top-level, when we call it later, 
 -- we also need to apply the captured variables from the environment
-type Capture = Apps TopLev Level
+type Capture = Apps TreeIdx Level
 
-lambdaLift :: Tm -> Program Exp
-lambdaLift orig = case runState (go_ emptyCtx orig) Seq.empty of { (main,tops) -> MkProgram tops main } where
+type TopCtx = Ctx 
 
-  go_ :: Ctx -> Tm -> LiftM Exp
-  go_ ctx term = fromEither <$> goEither Nothing ctx term
+-- is it true that `ignore` is always the keys of `table` ?
+data LiftCtx = MkLiftCtx
+  { ctx    :: Ctx                  -- ^ the usual context
+  , table  :: Map Level Capture    -- ^ we replace a let-bound function by a top-level partial application
+  }
+  deriving Show
 
-  fromEither :: Either Capture Exp -> Exp
-  fromEither ei = case ei of
-    Left  apps -> fromApps apps
-    Right expr -> expr
+emptyLiftCtx :: LiftCtx
+emptyLiftCtx = MkLiftCtx
+  { ctx    = emptyCtx
+  , table  = Map.empty 
+  }
 
-  goEither :: Maybe String -> Ctx -> Tm -> LiftM (Either Capture Exp)
-  goEither mbName ctx term = case term of
-    Lam {}                   -> let name = maybe "lam" id mbName in
-                                Left  <$> goLam    name ctx term
-    Log name term'@(Lam {})  -> Left  <$> goLam    name ctx term'
-    _                        -> Right <$> goNotLam      ctx term
+----------------------------------------
+
+-- information when dealing with function bodies 
+data FunInfo = MkFunInfo 
+  { _level    :: Level
+  , _nfree    :: Arity
+  , _freeMap  :: Map Level Level
+  , _table    :: Map Level Capture
+  , _newSig   :: FunTy
+  , _innerCtx :: Ctx
+  , _replace  :: Replacement
+  }
+  deriving Show
+
+funBodyInfo :: LiftCtx -> Maybe Ty -> FunTy -> TreeIdx -> Tm -> FunInfo
+funBodyInfo liftCtx@(MkLiftCtx{..}) mbRecTy (MkFunTy ctxArgs ret) topidx funbody = info where
+  level  = Seq.length ctx
+  middle = case mbRecTy of { Nothing -> Seq.empty ; Just ty -> Seq.singleton ty }
+  ctx'   = ctx <> middle <> (Seq.fromList ctxArgs)
+  ignore = Map.keysSet table 
+  (free, freeTys) = freeVarMap level ignore ctx' funbody
+  nfree  = Seq.length freeTys
+  args'  = seqToList freeTys ++ ctxArgs
+  this   = MkApps topidx (Map.keys free)
+  repl   = AppR this
+  table' = Map.insert level this table
+  sig'   = MkFunTy args' ret
+  info   = MkFunInfo level nfree free table' sig' ctx' repl
+
+----------------------------------------
+
+{-# NOINLINE lambdaLift #-}
+lambdaLift :: Tm -> Prog' TopIdx
+-- lambdaLift = replaceTreeIdxs . lambdaLift' 
+lambdaLift tm = unsafePerformIO (replaceTreeIdxs <$> lambdaLift' tm)
+
+{-# NOINLINE lambdaLift' #-}
+lambdaLift' :: Tm -> IO (Prog' TreeIdx)
+lambdaLift' lambdaTerm = program where
+
+  program :: IO (Prog' TreeIdx) 
+  program = do
+    (main,topstack) <- runStateT (go emptyLiftCtx lambdaTerm) initialState
+    case topstack of
+      [stack] -> return $ MkProgram (flattenStack stack) main 
+      _       -> error "lambdaLift: fatal: expecting a single final stack"
+
+  goVar :: LiftCtx -> Level -> Apps (Variable TreeIdx) Exp
+  goVar liftCtx@(MkLiftCtx{..}) j = 
+   case Map.lookup j table of
+      Nothing               -> MkApps (Loc j ) []
+      Just (MkApps ks args) -> MkApps (Top ks) (map LocE args)
+
+  fromApps :: Apps (Variable TreeIdx) Exp -> Exp
+  fromApps (MkApps var args) = case args of
+    [] -> VarE var
+    _  -> AppE var args
+
+  go :: LiftCtx -> Tm -> LiftM Exp
+  go = go' Nothing
+
+  go' :: Maybe String -> LiftCtx -> Tm -> LiftM Exp
+  go' mbName liftCtx@(MkLiftCtx{..}) term = case term of
+
+    Var' j -> return $ fromApps (goVar liftCtx j)
+
+    Let' ty rhs body -> do
+      let liftCtx' = MkLiftCtx (ctx |> ty) table
+      rhs'  <- go liftCtx  rhs        
+      body' <- go liftCtx' body
+      return (LetE ty rhs' body')
+
+    Fun' fun body -> do
+      let name = maybe "fun" id mbName
+      liftCtx' <- goLam name liftCtx  fun    
+      body'    <- go         liftCtx' body
+      return body'
+
+    Rec' fun body -> do
+      let name = maybe "rec" id mbName
+      liftCtx' <- goRec name liftCtx  fun  
+      body'    <- go         liftCtx' body
+      return body'
+
+    App' j args -> do
+      let fun' = goVar liftCtx j
+      args' <- mapM (go liftCtx) args
+      return $ appsE fun' args'
+
+    Pri' op args -> PriE op <$> mapM (go liftCtx) args
+
+    Lit' k  -> return (LitE k)
+
+    Log' n y -> go' (Just n) liftCtx y
+--    Dbg' n t x y -> go liftCtx y
+
 
   --
   -- given something like
@@ -314,148 +486,55 @@ lambdaLift orig = case runState (go_ emptyCtx orig) Seq.empty of { (main,tops) -
   --
   -- and wherever this lambda appeared needs to be replaced by `top a b`
   --
-  goLam :: String -> Ctx -> Tm -> LiftM Capture
-  goLam name ctx term = case term of
-    Lam {} -> {- debugNice "Lam/isLambda" (ctx,term) $ -} case isLambda' ctx term of
-      MkLams (MkFunTy argTys retTy) body -> do
-        let ctx' = ctx >< Seq.fromList argTys
-        body' <- go_ ctx' body
-        let level = ctxToLevel ctx
-            nargs = length argTys
-        let (free, freeTys) = freeVarMap' level ctx' body'
-            nfree = Seq.length freeTys
-            argTys' = F.toList freeTys ++ argTys
-            nargs'  = nfree + nargs 
+  goLam :: String -> LiftCtx -> Fun Tm -> LiftM LiftCtx
+  goLam name liftCtx@(MkLiftCtx{..}) (MkFun funsig funbody) = enter $ \idx -> do
 
-        let replace :: Level -> Exp
-            replace j = case Map.lookup j free of
-              Just new -> Loc' new
-              Nothing  -> if j >= level
-                then Loc' (j - level + nfree)
-                else error "lambdaLift/goLam: undetected free variable (shouldn't happen)"
-        i <- addNew' $ \i -> 
-            let name'  = name ++ show i
-                funTy' = MkFunTy argTys' retTy
-                body'' = (replaceVar' replace body')
-            in  MkFunDef i name' (MkLams funTy' body'')
-  
-        return (MkApps i (Map.keys free))
-  
-    _ -> error "lambdaLift/goLam: not Lam (shouldn't happen)"
+    let name'  = name ++ "_" ++ treeIdxToIdentPostfix idx
+    let funTy  = fromFunTy funsig
+    let info@(MkFunInfo{..}) = funBodyInfo liftCtx Nothing funsig idx funbody
+    body' <- go (MkLiftCtx _innerCtx table) funbody     -- NOTE!!! we NEED the OLD table here!!!
 
-{-
-goFix :: Level -> Tm -> LiftM Capture
-  goFix level term = case term of
-    Lam {} -> case isLambda' term of
-      MkLams nargs body -> do
-        -- the +1 is the recursive function itself
-        body' <- go_ (level + 1 + nargs) body
-        let (free, nfree) = freeVarMap' level (level + 1 + nargs) body'
-            nargs' = nfree + nargs
-            thisApps i = MkApps i (Map.keys free)
-        let replace :: Capture -> Level -> Exp
-            replace (MkApps top args) = go where
-              go :: Level -> Exp
-              go j = case Map.lookup j free of
-                Just new             -> Loc' new
-                Nothing | j >  level -> Loc' (j - 1 - level + nfree)
-                Nothing | j == level -> app' (Top' top) (map go args)           -- !!!!
-                Nothing | j <  level -> error "lambdaLift/goFix: undetected free variable (shouldn't happen)"
-        i <- addNew' $ \k -> MkFunDef nargs' (replaceVar' (replace (thisApps k)) body')
-        return (MkApps i (Map.keys free))
-    _ -> error "lambdaLift/goFix: not Lam (shouldn't happen)"
--}
+    let replace :: Level -> Replacement
+        replace j = case Map.lookup j _freeMap of
+          Just new  -> VarR new
+          Nothing   -> if j >= _level
+            then VarR (j - _level + _nfree)
+            else error "lambdaLift/goLam: undetected free variable (shouldn't happen)"
+
+    let liftCtx' = MkLiftCtx (ctx |> funTy) _table
+    let fun'     = MkLams _newSig (replaceVars replace body')
+    let def      = MkFunDef idx name' fun'
+    return (def, liftCtx')
 
   -- this is like `goLam`, but more tricky. We must remove the recursive argument
-  -- and replace its occurences with the new top-level variable, applied to 
-  -- the local names of the captured variables
-  --
-  -- in the typed world: we had something like
-  --
-  -- letrec f :: s -> t
-  --        f x = if cond x then x else f (x-1) + 1
-  --
-  goFix :: String -> Ctx -> Ty -> Tm -> LiftM Capture
-  goFix name ctx recTy term = case term of
-    Log name' term'@(Lam {}) -> goFix name' ctx recTy term'      -- naming hack
-    Lam {} -> {- debugNice "Rec(Fix)/isLambda" (ctx,recTy,term) $ -} case isLambda' (ctx |> recTy) term of
-      MkLams funTy@(MkFunTy argTys retTy) body -> do
-        -- let recTy = fromFunTy funTy                        -- type of the recursive call (eg. s -> t)
-        let ctx'  = ctx >< (recTy <| Seq.fromList argTys)
-        body' <- {- debug "type of rec" recTy $ -} go_ ctx' body
-        let level = ctxToLevel ctx
-            nargs = length argTys
-        let (free, freeTys) = freeVarMap' level ctx' body'
-            nfree = Seq.length freeTys
-            argTys' = F.toList freeTys ++ argTys
-            nargs'  = nfree + nargs 
+  -- and replace its occurences (in the body of the recursive function) with the new 
+  -- top-level variable, applied to the captured variables, also in the function nody
+  -- 
+  goRec :: String -> LiftCtx -> Fun Tm -> LiftM LiftCtx
+  goRec name liftCtx@(MkLiftCtx{..}) (MkFun funsig funbody) = enter $ \idx -> do
 
-        let thisApps i = MkApps i (Map.keys free)
-        let replace :: Capture -> Level -> Exp
-            replace (MkApps top args) = go where
-              go :: Level -> Exp
-              go j = case Map.lookup j free of
-                Just new             -> Loc' new
-                Nothing | j >  level -> Loc' (j - 1 - level + nfree)
-                Nothing | j == level -> app' (Top' top) (map go args)           -- !!!!
-                Nothing | j <  level -> error "lambdaLift/goFix: undetected free variable (shouldn't happen)"
-        i <- addNew' $ \i -> 
-              let name'  = name ++ show i
-                  funTy' = MkFunTy argTys' retTy
-                  body'' = replaceVar' (replace (thisApps i)) body'
-              in  MkFunDef i name' (MkLams funTy' body'')
+    let name'  = name ++ "_" ++ treeIdxToIdentPostfix idx
+    let recTy  = fromFunTy funsig
+    let MkFunInfo{..} = funBodyInfo liftCtx (Just recTy) funsig idx funbody
+    body' <- go (MkLiftCtx _innerCtx _table) funbody
 
-        return (MkApps i (Map.keys free))
+    let replace :: Level -> Replacement
+        replace = go where
+          
+          shift :: Level -> Level
+          shift j = j - 1 - _level + _nfree
 
-    _ -> error "lambdaLift/goFix: not Lam (shouldn't happen)"
+          go :: Level -> Replacement
+          go j = case Map.lookup j _freeMap of
+            Just new              -> VarR new
+            Nothing | j >  _level -> VarR (shift j)
+            Nothing | j == _level -> case _replace of { AppR_ top args -> AppR_ top (map shift args) }   -- !!!!
+            Nothing | j <  _level -> error "lambdaLift/goRec: undetected free variable (shouldn't happen)"
 
-  app' :: Exp -> [Exp] -> Exp
-  app' fun []   = fun
-  app' fun args = App' fun args
-
-  fromApps :: Capture -> Exp
-  fromApps (MkApps k captured) = app' (Top' k) (map Loc' captured)
-
-  goNotLam :: Ctx -> Tm -> LiftM Exp
-  goNotLam ctx term = case term of
-
-    Var j -> return (Loc' j)
-
-    -- if this was of the form `let f = \x y z -> ... a ... b ... in ... f ...` 
-    -- then appearances of `f` in the body needs to be replaced by `top a b`
-    Let ty rhs body -> do
-      rhsEi <- goEither (Just "fun")  ctx        rhs
-      body' <- go_                   (ctx |> ty) body
-      let level = ctxToLevel ctx
-      return $ case rhsEi of 
-        Left  apps -> replaceVar (level :~> fromApps apps) body'
-        Right rhs' -> Let' ty rhs' body'
-      
-    -- if this was of the form `let f = \x y z -> ... f ... a ... b ... in ... f ...` 
-    -- then appearances of `f` in the body needs to be replaced by `top a b`
-    Rec ty rhs body -> case rhs of
-      Lam {} -> do
-        apps  <- goFix "rec"  ctx    ty  rhs
-        body' <- go_         (ctx |> ty) body
-        let level = ctxToLevel ctx
-        return $ replaceVar (level :~> fromApps apps) body'
-      _ -> error "recursive definitions must be functions"
-
-    App {} -> case isApp' term of
-      MkApps fun args -> do
-        fun'  <-       go_ ctx  fun
-        args' <- mapM (go_ ctx) args
-        return (App' fun' args')
-
-    Pri op args -> Pri' op <$> mapM (go_ ctx) args
-
-    Lit k  -> return (Lit' k)
-
-    Lam {} -> error "lambdaLift/goNotLam: shouldn't happen (Lam)"
-
-    Dbg n t x y -> go_ ctx y
-    Log n     y -> go_ ctx y
+    let liftCtx' = MkLiftCtx (ctx |> recTy) _table
+    let fun'     = MkLams _newSig (replaceVars replace body')
+    let def      = MkFunDef idx name' fun'
+    return (def, liftCtx')
 
 --------------------------------------------------------------------------------
-
 

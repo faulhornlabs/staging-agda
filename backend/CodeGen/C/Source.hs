@@ -21,7 +21,7 @@ import AST.Ty
 import AST.Literal
 import AST.PrimOp
 
-import CodeGen.Lifting ( Program , Program'(..) , FunDef(..) )
+import CodeGen.Lifting ( Program'(..) , Program , FunDef'(..) , FunDef )
 import CodeGen.ANF     ( Atom(..) , ExpA(..) , ANF(..) , ANFE , extractAllTysExp , typeOfANFE )
 
 import CodeGen.C.Types
@@ -141,6 +141,8 @@ runCodegenM topNames tyNames action = runReader (evalStateT action iniS) (MkR 0 
 
 addProgram :: Program ANFE -> CG ()
 addProgram (MkProgram fundefs mainANF) = do
+  mapM addFunDecl fundefs
+  addLine sep
   mapM addFunDef fundefs
   let mainTy    = typeOfANFE mainANF 
   let mainFunTy = MkFunTy [] mainTy
@@ -186,14 +188,14 @@ cgenExp level declset cvar (MkTyped ty expr) = do
         DeclareAndSet -> declSetPrefix
         JustSet       -> justSetPrefix
   case expr of
-    AtmE atom     -> addLine $ setPrefix ++ cgenAtom atom                ++ " ;"
-    PriE op args  -> addLine $ setPrefix ++ cgenPrimOp (MkPrim op args)  ++ " ;"
+    AtmA atom     -> addLine $ setPrefix ++ cgenAtom atom                ++ " ;"
+    PriA op args  -> addLine $ setPrefix ++ cgenPrimOp (MkPrim op args)  ++ " ;"
   
-    AppE idx args -> do
+    AppA idx args -> do
       fname <- fetchFunName idx
       addLine $ setPrefix ++ fname ++ "( " ++ intercalate " , " (map cgenAtom args) ++ " );"
   
-    IftE cond trueBr falseBr -> do
+    IftA cond trueBr falseBr -> do
       let cond' = cgenAtom cond
       join <- freshName "join"
       addLine $ cty ++ " " ++ join ++ ";"
@@ -222,9 +224,27 @@ addANFWithReturn level anf = do
   final  <- addANF' level DeclareAndSet result anf
   let ret = "return (" ++ final ++ ");"
   addLine ret
+
+addFunDecl :: FunDef ANFE -> CG ()
+addFunDecl = addFunDecl' True
+
+addFunDecl' :: Bool -> FunDef ANFE -> CG ()
+addFunDecl' semicolon (MkFunDef idx name (MkLams funTy@(MkFunTy argTys retTy) body)) = do
+  cretTy <- fetchTyName retTy
+  let arity = length argTys
+  args <- forM (zip [0..] argTys) $ \(i,ty) -> do
+    cty <- fetchTyName ty
+    return (cty ++ " x" ++ show i)
+  let decl = cretTy ++ " " ++ name ++ "( " ++ intercalate " , " args ++ " )" ++ (if semicolon then ";" else "")
+  addLine decl
   
 addFunDef :: FunDef ANFE -> CG ()
-addFunDef (MkFunDef idx name (MkLams funTy@(MkFunTy argTys retTy) body)) = do
+addFunDef fundef@(MkFunDef idx name (MkLams funTy@(MkFunTy argTys retTy) body)) = do
+  let arity = length argTys
+  addFunDecl' False fundef
+  inBlock $ addANFWithReturn arity body
+  addLine ""
+{-
   cretTy <- fetchTyName retTy
   let arity = length argTys
   args <- forM (zip [0..] argTys) $ \(i,ty) -> do
@@ -233,6 +253,8 @@ addFunDef (MkFunDef idx name (MkLams funTy@(MkFunTy argTys retTy) body)) = do
   let decl = cretTy ++ " " ++ name ++ "( " ++ intercalate " , " args ++ " )"
   addLine decl
   inBlock $ addANFWithReturn arity body
+-}
+
 
 --------------------------------------------------------------------------------
 

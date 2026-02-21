@@ -15,6 +15,7 @@ import AST.Val
 import AST.Random
 import Run.Eval
 
+import CodeGen.Preprocess
 import CodeGen.Lifting
 import CodeGen.ANF
 import CodeGen.C.Source
@@ -35,11 +36,11 @@ import Big.Limbs
 -- main = main_Small1
 -- main = main_Nat
 
-main = main_modInv
+-- main = main_modInv
 -- main = main_tiny_modInv
 -- main = main_baby_modInv
 -- main = main_montDiv
--- main = main_recAdd
+main = main_recAdd
 -- main = runCommon "examples/ex_closure1.ast" $ \_ -> return ()
 
 --main = runCommon "examples/ex_fft0.ast" $ \_ -> return ()
@@ -75,6 +76,7 @@ main_Mod1 = do
 
 main_recAdd = do
   --runCommon "examples/ex_recadd.ast" $ \_ -> return ()
+  --runCommon "examples/ex_recmul1.ast" $ \_ -> return ()
   runCommon "examples/ex_recmul.ast" $ \_ -> return ()
 
 main_ModP = do
@@ -191,7 +193,7 @@ runCommon' printAstFlag fname kont = do
 
       when printAstFlag $ do
         putStrLn "---------------------------"
-        print ast
+        pPrint ast -- print ast
 
       putStrLn "---------------------------"
       putStrLn $ "program type = " ++ show (inferTy_ ast)
@@ -200,7 +202,8 @@ runCommon' printAstFlag fname kont = do
 
       putStrLn $ "\neval result = " ++ show res
 
-      let program = lambdaLift   ast
+      let prep    = preprocess   ast
+      let program = lambdaLift   prep
       let anf     = programToANF program
       let csource = anfToCSource anf 
 
@@ -268,21 +271,22 @@ debugAnfConversion' term = do
   if (inferTy_ term /= U64) 
     then error "debugAnfConversion: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLift   term
-      let anf  = programToANF prg
+      let pre  = preprocess   term
+      let prog = lambdaLift   pre
+      let anf  = programToANF prog
 
       putStrLn "---------------------------"
       putStrLn $ "raw program:"
       print term
       putStrLn "---------------------------"
       putStrLn $ "lambda-lifted program:"
-      printProgram prg
+      printProgram prog
       putStrLn "---------------------------"
       putStrLn $ "ANF converted program:"
       printANFProgram anf
 
       res1 <- eval term
-      res2 <- runProgram prg
+      res2 <- runProgram prog
       res3 <- runANFProgram anf
       putStrLn $ "result of original      = " ++ show res1
       putStrLn $ "result of lambda-lifted = " ++ show res2
@@ -291,9 +295,10 @@ debugAnfConversion' term = do
 findAnfCounterExample :: Size -> IO Raw
 findAnfCounterExample target = do
   term <- randomTermU64 target
-  let prg  = lambdaLift   term
-  let anf  = programToANF prg
-  res2 <- runProgram prg
+  let pre  = preprocess   term
+  let prog = lambdaLift   pre
+  let anf  = programToANF prog
+  res2 <- runProgram prog
   res3 <- runANFProgram anf
   if (res2 /= res3) 
     then return term
@@ -307,9 +312,10 @@ testLambdaLifting1 target = do
   if (inferTy_ term /= U64) 
     then error "testLambdaLifting1: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLift term
+      let pre  = preprocess term
+      let prog = lambdaLift pre
       res1 <- eval term
-      res2 <- runProgram prg
+      res2 <- runProgram prog
       return (res1 == res2)
   
 testAnfConversion1 :: Size -> IO Bool
@@ -318,10 +324,11 @@ testAnfConversion1 target = do
   if (inferTy_ term /= U64) 
     then error "testAnfConversion1: type inference doesn't match expectations"
     else do
-      let prg  = lambdaLift   term
-      let anf  = programToANF prg
+      let pre  = preprocess   term
+      let prog = lambdaLift   pre
+      let anf  = programToANF prog
       res1 <- eval term
-      res2 <- runProgram prg
+      res2 <- runProgram prog
       res3 <- runANFProgram anf
       return (res2 == res3)
 

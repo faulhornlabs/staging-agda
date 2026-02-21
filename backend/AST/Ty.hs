@@ -7,6 +7,11 @@ module AST.Ty where
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Data.Sequence ( Seq , (|>) )
+import qualified Data.Sequence as Seq
+
+import Aux.Misc
+
 --------------------------------------------------------------------------------
 
 {-
@@ -63,6 +68,20 @@ isAtomicBuiltInTy ty = case ty of
   U64  -> True
   Nat  -> True
   _    -> False
+
+--------------------------------------------------------------------------------
+
+type Ctx   = Seq Ty
+type TyEnv = Ctx
+
+ctxLkp :: Ctx -> Level -> Ty
+ctxLkp = Seq.index
+
+emptyCtx :: Ctx
+emptyCtx = Seq.empty
+
+ctxToLevel :: Ctx -> Level
+ctxToLevel = Seq.length
 
 --------------------------------------------------------------------------------
 
@@ -164,6 +183,11 @@ toFunTy :: Ty -> FunTy
 toFunTy ty = case isFunctionTy ty of
   Just funty -> funty
   Nothing    -> error "toFunTy: was not lambda"
+
+toFunTy_ :: Ty -> FunTy
+toFunTy_ ty = case isFunctionTy ty of
+  Just funty -> funty
+  Nothing    -> MkFunTy [] ty
 
 --------------------------------------------------------------------------------
  
